@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String     @default("MANAGER")
+  fixedSalary  Float    @default(15000)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  partners     Partner[]      @relation("ResponsibleUser")
+  tasks        Task[]         @relation("AssignedUser")
+  transactions Transaction[]  @relation("CreatedByUser")
+  comments     Comment[]
+  stageChanges StageHistory[]
+  payrolls     PayrollRecord[]
+}
+
+model Project {
+  id                       String   @id @default(cuid())
+  name                     String
+  currency                 String   @default("RUB")
+  unitPrice                Float?
+  partnerCommissionPercent Float    @default(50)
+  ownerProfitPercent       Float    @default(50)
+  kpiEnabled               Boolean  @default(true)
+  kpiAmount                Float    @default(0)
+  kpiTriggerStage          String   @default("Работает")
+  bonusEnabled             Boolean  @default(false)
+  bonusPercent             Float    @default(0)
+  bonusThreshold           Float    @default(0)
+  bonusMaxAmount           Float?
+  bonusPeriodMonths        Int?
+  partnerPlan              Int?
+  funnelStages             String   @default("[\"Найдено\",\"Первый контакт\",\"Ведём переговоры\",\"Согласился\",\"Настройка\",\"Работает\",\"Есть продажи\",\"Активный партнёр\",\"Неактивный\"]")
+  healthGreenDays          Int      @default(7)
+  healthYellowDays         Int      @default(29)
+  isActive                 Boolean  @default(true)
+  createdAt                DateTime @default(now())
+
+  partnerTypes PartnerType[]
+  partners     Partner[]
+}
+
+model PartnerType {
+  id        String  @id @default(cuid())
+  projectId String
+  name      String
+  kpiAmount Float
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  partners  Partner[]
+}
+
+model Partner {
+  id                 String        @id @default(cuid())
+  projectId          String
+  partnerTypeId      String?
+  name               String
+  instagram          String?
+  telegram           String?
+  phone              String?
+  responsibleUserId  String
+  stage              String
+    status             String        @default("ACTIVE")
+  firstContactDate   DateTime?
+  connectedDate      DateTime?
+  firstSaleDate      DateTime?
+  lastSaleDate       DateTime?
+  kpiPaid            Boolean       @default(false)
+  lostReason         String?
+  lostAt             DateTime?
+  retryReminderDate  DateTime?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  partnerType  PartnerType?   @relation(fields: [partnerTypeId], references: [id])
+  responsible  User           @relation("ResponsibleUser", fields: [responsibleUserId], references: [id])
+  transactions Transaction[]
+  stageHistory StageHistory[]
+  tasks        Task[]
+  comments     Comment[]
+}
+
+model StageHistory {
+  id            String   @id @default(cuid())
+  partnerId     String
+  fromStage     String?
+  toStage       String
+  changedByUserId String
+  changedAt     DateTime @default(now())
+
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  changedBy User    @relation(fields: [changedByUserId], references: [id])
+}
+
+model Transaction {
+  id               String   @id @default(cuid())
+  partnerId        String
+  date             DateTime
+  revenueAmount    Float
+  ownerProfitAmount Float
+  note             String?
+  createdByUserId  String
+  createdAt        DateTime @default(now())
+
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  createdBy User    @relation("CreatedByUser", fields: [createdByUserId], references: [id])
+}
+
+model Task {
+  id               String    @id @default(cuid())
+  assignedToUserId String
+  partnerId        String?
+  title            String
+  dueDate          DateTime?
+  isDone           Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+
+  assignedTo User     @relation("AssignedUser", fields: [assignedToUserId], references: [id])
+  partner    Partner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  partnerId String
+  userId    String
+  text      String
+  createdAt DateTime @default(now())
+
+  partner Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+}
+
+model PayrollRecord {
+  id          String   @id @default(cuid())
+  userId      String
+  month       String
+  fixedAmount Float
+  kpiTotal    Float
+  bonusTotal  Float
+  totalAmount Float
+  paidAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, month])
+}

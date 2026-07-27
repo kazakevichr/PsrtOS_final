@@ -1,0 +1,141 @@
+"use client";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+
+type Project = {
+  id: string;
+  name: string;
+  currency: string;
+  partnerCommissionPercent: number;
+  ownerProfitPercent: number;
+  kpiEnabled: boolean;
+  kpiAmount: number;
+  bonusEnabled: boolean;
+  bonusPercent: number;
+  bonusThreshold: number;
+  bonusMaxAmount: number | null;
+  bonusPeriodMonths: number | null;
+  partnerTypes: { id: string; name: string; kpiAmount: number }[];
+};
+
+export default function ProjectSettingsForm({ project }: { project: Project }) {
+  const router = useRouter();
+  const [form, setForm] = useState(project);
+  const [busy, setBusy] = useState(false);
+  const [typeName, setTypeName] = useState("");
+  const [typeKpi, setTypeKpi] = useState("");
+
+  function set<K extends keyof Project>(key: K, value: Project[K]) {
+    setForm((f) => ({ ...f, [key]: value }));
+  }
+
+  async function save() {
+    setBusy(true);
+    await fetch(`/api/projects/${project.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        currency: form.currency,
+        partnerCommissionPercent: Number(form.partnerCommissionPercent),
+        ownerProfitPercent: Number(form.ownerProfitPercent),
+        kpiEnabled: form.kpiEnabled,
+        kpiAmount: Number(form.kpiAmount),
+        bonusEnabled: form.bonusEnabled,
+        bonusPercent: Number(form.bonusPercent),
+        bonusThreshold: Number(form.bonusThreshold),
+        bonusMaxAmount: form.bonusMaxAmount === null ? null : Number(form.bonusMaxAmount),
+        bonusPeriodMonths: form.bonusPeriodMonths === null ? null : Number(form.bonusPeriodMonths),
+      }),
+    });
+    setBusy(false);
+    router.refresh();
+  }
+
+  async function addPartnerType(e: React.FormEvent) {
+    e.preventDefault();
+    if (!typeName.trim()) return;
+    await fetch(`/api/projects/${project.id}/partner-types`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: typeName, kpiAmount: Number(typeKpi || 0) }),
+    });
+    setTypeName("");
+    setTypeKpi("");
+    router.refresh();
+  }
+
+  return (
+    <div className="card space-y-3">
+      <h3 className="font-semibold">{project.name}</h3>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
+        <label className="flex flex-col gap-1">
+          Валюта
+          <input className="input" value={form.currency} onChange={(e) => set("currency", e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          % партнёру от выручки
+          <input className="input" type="number" value={form.partnerCommissionPercent} onChange={(e) => set("partnerCommissionPercent", Number(e.target.value) as any)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          % владельца от остатка
+          <input className="input" type="number" value={form.ownerProfitPercent} onChange={(e) => set("ownerProfitPercent", Number(e.target.value) as any)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          KPI включён
+          <select className="input" value={String(form.kpiEnabled)} onChange={(e) => set("kpiEnabled", (e.target.value === "true") as any)}>
+            <option value="true">Да</option>
+            <option value="false">Нет</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          Сумма KPI (общая)
+          <input className="input" type="number" value={form.kpiAmount} onChange={(e) => set("kpiAmount", Number(e.target.value) as any)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          Бонус включён
+          <select className="input" value={String(form.bonusEnabled)} onChange={(e) => set("bonusEnabled", (e.target.value === "true") as any)}>
+            <option value="true">Да</option>
+            <option value="false">Нет</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          Бонус, %
+          <input className="input" type="number" value={form.bonusPercent} onChange={(e) => set("bonusPercent", Number(e.target.value) as any)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          Порог прибыли/мес для бонуса
+          <input className="input" type="number" value={form.bonusThreshold} onChange={(e) => set("bonusThreshold", Number(e.target.value) as any)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          Максимальный бонус (пусто = без лимита)
+          <input className="input" type="number" value={form.bonusMaxAmount ?? ""} onChange={(e) => set("bonusMaxAmount", (e.target.value === "" ? null : Number(e.target.value)) as any)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          Период бонуса, мес. (пусто = бессрочно)
+          <input className="input" type="number" value={form.bonusPeriodMonths ?? ""} onChange={(e) => set("bonusPeriodMonths", (e.target.value === "" ? null : Number(e.target.value)) as any)} />
+        </label>
+      </div>
+
+      <button className="btn btn-primary" disabled={busy} onClick={save}>Сохранить настройки</button>
+
+      <div className="border-t pt-3">
+        <h4 className="text-sm font-semibold mb-2">Типы партнёров (для KPI по типу, напр. Музлото)</h4>
+        <div className="space-y-1 text-sm mb-2">
+          {form.partnerTypes.map((t) => (
+            <div key={t.id} className="flex justify-between">
+              <span>{t.name}</span>
+              <span>{t.kpiAmount} {form.currency}</span>
+            </div>
+          ))}
+          {form.partnerTypes.length === 0 && <p className="text-gray-400">Типов пока нет.</p>}
+        </div>
+        <form onSubmit={addPartnerType} className="flex gap-2">
+          <input className="input" placeholder="Название типа" value={typeName} onChange={(e) => setTypeName(e.target.value)} />
+          <input className="input w-32" placeholder="KPI" type="number" value={typeKpi} onChange={(e) => setTypeKpi(e.target.value)} />
+          <button className="btn btn-secondary" type="submit">+ Добавить</button>
+        </form>
+      </div>
+    </div>
+  );
+}
