@@ -2,40 +2,42 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { computePayroll } from "@/lib/economics";
+import { computePayroll, resolvePeriod, PeriodType } from "@/lib/economics";
+import PeriodFilter from "@/components/PeriodFilter";
 
-function currentMonth() {
-  return new Date().toISOString().slice(0, 7);
-}
-
-export default async function PayrollPage({ searchParams }: { searchParams: { month?: string } }) {
+export default async function PayrollPage({
+  searchParams,
+}: {
+  searchParams: { period?: string; anchor?: string };
+}) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
-  const month = searchParams.month || currentMonth();
+  const isOwner = session.user.role === "OWNER";
+  const periodType = (isOwner && (searchParams.period as PeriodType)) || "month";
+  const period = resolvePeriod(periodType, searchParams.anchor);
 
   let userIds: string[];
-  if (session.user.role === "OWNER") {
+  if (isOwner) {
     const managers = await prisma.user.findMany({ where: { role: "MANAGER", isActive: true } });
     userIds = managers.map((m) => m.id);
   } else {
     userIds = [session.user.id];
   }
 
-  const payrolls = await Promise.all(userIds.map((id) => computePayroll(id, month)));
+  const payrolls = await Promise.all(userIds.map((id) => computePayroll(id, period)));
   const grandTotal = payrolls.reduce((s, p) => s + p.totalAmount, 0);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <h1 className="text-xl font-bold">Зарплата</h1>
-        <form className="flex items-center gap-2">
-          <label className="text-sm text-gray-500">Месяц:</label>
-          <input className="input" type="month" name="month" defaultValue={month} onChange={(e) => e.target.form?.requestSubmit()} />
-        </form>
+        <PeriodFilter showTypeTabs={isOwner} />
       </div>
+      <p className="text-sm text-gray-500 mb-4">Период: {period.label}</p>
 
       <div className="space-y-4">
+        {payrolls.length === 0 && <p className="text-sm text-gray-400">Нет данных.</p>}
         {payrolls.map((p) => (
           <div key={p.userId} className="card">
             <div className="flex justify-between items-center">
@@ -60,9 +62,9 @@ export default async function PayrollPage({ searchParams }: { searchParams: { mo
             )}
           </div>
         ))}
-        {session.user.role === "OWNER" && (
+        {isOwner && payrolls.length > 0 && (
           <div className="card flex justify-between font-semibold">
-            <span>Итого фонд оплаты за {month}</span>
+            <span>Итого фонд оплаты за период</span>
             <span>{grandTotal.toLocaleString("ru-RU")} ₽</span>
           </div>
         )}

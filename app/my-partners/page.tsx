@@ -1,0 +1,35 @@
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import MyPartnersList from "@/components/MyPartnersList";
+
+export default async function MyPartnersPage() {
+  const session = await getServerSession(authOptions);
+  if (!session) redirect("/login");
+
+  const partnersRaw = await prisma.partner.findMany({
+    where: { responsibleUserId: session.user.id, status: "ACTIVE" },
+    include: { project: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const partners = partnersRaw.map((p) => ({
+    id: p.id,
+    name: p.name,
+    phone: p.phone,
+    instagram: p.instagram,
+    telegram: p.telegram,
+    stage: p.stage,
+    status: p.status,
+    project: { name: p.project.name, currency: p.project.currency },
+  }));
+
+  return (
+    <div>
+      <h1 className="text-xl font-bold mb-1">Мои партнёры</h1>
+      <p className="text-sm text-gray-500 mb-4">Все партнёры по всем проектам, за которых вы отвечаете</p>
+      <MyPartnersList partners={partners} />
+    </div>
+  );
+}

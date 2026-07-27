@@ -3,6 +3,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+const SALES_STAGE = "Есть продажи";
+const WORKING_STAGE = "Работает";
+
 type Partner = {
   id: string;
   name: string;
@@ -11,6 +14,7 @@ type Partner = {
   health: "GREEN" | "YELLOW" | "RED";
   responsible: { id: string; name: string };
   partnerType?: { name: string } | null;
+  adCreativeUrl?: string | null;
 };
 
 export default function KanbanBoard({
@@ -35,6 +39,8 @@ export default function KanbanBoard({
   const [name, setName] = useState("");
   const [instagram, setInstagram] = useState("");
   const [telegram, setTelegram] = useState("");
+  const [phone, setPhone] = useState("");
+  const [comment, setComment] = useState("");
   const [partnerTypeId, setPartnerTypeId] = useState("");
   const [responsibleUserId, setResponsibleUserId] = useState(currentUserId);
   const [busy, setBusy] = useState(false);
@@ -42,7 +48,7 @@ export default function KanbanBoard({
   async function addPartner(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
-    await fetch("/api/partners", {
+    const res = await fetch("/api/partners", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -50,24 +56,50 @@ export default function KanbanBoard({
         name,
         instagram,
         telegram,
+        phone,
         partnerTypeId: partnerTypeId || undefined,
         responsibleUserId: isOwner ? responsibleUserId : undefined,
       }),
     });
+    if (res.ok && comment.trim()) {
+      const created = await res.json();
+      await fetch(`/api/partners/${created.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: comment }),
+      });
+    }
     setBusy(false);
     setShowForm(false);
     setName("");
     setInstagram("");
     setTelegram("");
+    setPhone("");
+    setComment("");
     router.refresh();
   }
 
-  async function moveStage(partnerId: string, toStage: string) {
-    await fetch(`/api/partners/${partnerId}/stage`, {
+  async function moveStage(partner: Partner, toStage: string) {
+    let adCreativeUrl: string | undefined;
+
+    if (toStage === WORKING_STAGE && !partner.adCreativeUrl) {
+      const url = window.prompt(
+        "Перед переводом в «Работает» нужна ссылка/скриншот, что партнёр выложил рекламу (например, ссылка на пост или файл в облаке):"
+      );
+      if (!url || !url.trim()) return;
+      adCreativeUrl = url.trim();
+    }
+
+    const res = await fetch(`/api/partners/${partner.id}/stage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ toStage }),
+      body: JSON.stringify({ toStage, adCreativeUrl }),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      window.alert(data.error || "Не удалось перевести партнёра на эту стадию.");
+      return;
+    }
     router.refresh();
   }
 
@@ -86,6 +118,7 @@ export default function KanbanBoard({
       {showForm && (
         <form onSubmit={addPartner} className="card mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <input className="input" placeholder="Имя партнёра" value={name} onChange={(e) => setName(e.target.value)} required />
+          <input className="input" placeholder="Телефон" value={phone} onChange={(e) => setPhone(e.target.value)} />
           <input className="input" placeholder="Instagram" value={instagram} onChange={(e) => setInstagram(e.target.value)} />
           <input className="input" placeholder="Telegram" value={telegram} onChange={(e) => setTelegram(e.target.value)} />
           {partnerTypes.length > 0 && (
@@ -103,6 +136,13 @@ export default function KanbanBoard({
               ))}
             </select>
           )}
+          <textarea
+            className="input sm:col-span-2"
+            placeholder="Комментарий (необязательно)"
+            rows={2}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+          />
           <div className="sm:col-span-2 flex gap-2">
             <button className="btn btn-primary" disabled={busy} type="submit">Сохранить</button>
             <button className="btn btn-secondary" type="button" onClick={() => setShowForm(false)}>Отмена</button>
@@ -120,36 +160,46 @@ export default function KanbanBoard({
                 {stage} ({stagePartners.length})
               </div>
               <div className="space-y-2">
-                {stagePartners.map((p) => (
-                  <div key={p.id} className="card">
-                    <div className="flex justify-between items-start">
-                      <Link href={`/partners/${p.id}`} className="font-medium text-brand-700 hover:underline">
-                        {p.name}
-                      </Link>
-                      <span className={badgeClass[p.health]}>{badgeLabel[p.health]}</span>
+                {stagePartners.map((p) => {
+                  const nextStage = stages[stageIdx + 1];
+                  const nextIsSalesLocked = nextStage === SALES_STAGE && !isOwner;
+                  return (
+                    <div key={p.id} className="card">
+                      <div className="flex justify-between items-start">
+                        <Link href={`/partners/${p.id}`} className="font-medium text-brand-700 hover:underline">
+                          {p.name}
+                        </Link>
+                        <span className={badgeClass[p.health]}>{badgeLabel[p.health]}</span>
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">{p.responsible.name}</div>
+                      {p.partnerType && <div className="text-xs text-gray-400">{p.partnerType.name}</div>}
+                      <div className="flex gap-1 mt-2 items-center">
+                        {stageIdx > 0 && (
+                          <button
+                            className="btn btn-secondary !px-2 !py-1 text-xs"
+                            onClick={() => moveStage(p, stages[stageIdx - 1])}
+                          >
+                            ← Назад
+                          </button>
+                        )}
+                        {stageIdx < stages.length - 1 && (
+                          nextIsSalesLocked ? (
+                            <span className="text-xs text-gray-400" title="Перевод в «Есть продажи» доступен только владельцу">
+                              🔒 Далее (только владелец)
+                            </span>
+                          ) : (
+                            <button
+                              className="btn btn-primary !px-2 !py-1 text-xs"
+                              onClick={() => moveStage(p, nextStage)}
+                            >
+                              Далее →
+                            </button>
+                          )
+                        )}
+                      </div>
                     </div>
-                    <div className="text-xs text-gray-500 mt-1">{p.responsible.name}</div>
-                    {p.partnerType && <div className="text-xs text-gray-400">{p.partnerType.name}</div>}
-                    <div className="flex gap-1 mt-2">
-                      {stageIdx > 0 && (
-                        <button
-                          className="btn btn-secondary !px-2 !py-1 text-xs"
-                          onClick={() => moveStage(p.id, stages[stageIdx - 1])}
-                        >
-                          ← Назад
-                        </button>
-                      )}
-                      {stageIdx < stages.length - 1 && (
-                        <button
-                          className="btn btn-primary !px-2 !py-1 text-xs"
-                          onClick={() => moveStage(p.id, stages[stageIdx + 1])}
-                        >
-                          Далее →
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );

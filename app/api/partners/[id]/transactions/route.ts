@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { calcOwnerProfit } from "@/lib/economics";
+import { calcOwnerProfit, calcPartnerPayout } from "@/lib/economics";
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -16,6 +16,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!partner) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const ownerProfitAmount = calcOwnerProfit(Number(revenueAmount), partner.project);
+  const partnerPayoutAmount = calcPartnerPayout(Number(revenueAmount), ownerProfitAmount);
   const txDate = date ? new Date(date) : new Date();
 
   const transaction = await prisma.transaction.create({
@@ -24,6 +25,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       date: txDate,
       revenueAmount: Number(revenueAmount),
       ownerProfitAmount,
+      partnerPayoutAmount,
       note: note || null,
       createdByUserId: session.user.id,
     },

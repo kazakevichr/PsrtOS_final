@@ -3,10 +3,18 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import TaskList from "@/components/TaskList";
+import { ensureAutoTasksForUser } from "@/lib/autoTasks";
 
 export default async function TasksPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
+
+  if (session.user.role === "MANAGER") {
+    await ensureAutoTasksForUser(session.user.id);
+  } else {
+    const managers = await prisma.user.findMany({ where: { role: "MANAGER", isActive: true }, select: { id: true } });
+    await Promise.all(managers.map((m) => ensureAutoTasksForUser(m.id)));
+  }
 
   const where: any = {};
   if (session.user.role === "MANAGER") where.assignedToUserId = session.user.id;

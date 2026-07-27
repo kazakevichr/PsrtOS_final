@@ -44,6 +44,7 @@ model Project {
   healthGreenDays          Int      @default(7)
   healthYellowDays         Int      @default(29)
   isActive                 Boolean  @default(true)
+  knowledgeBase            String   @default("")
   createdAt                DateTime @default(now())
 
   partnerTypes PartnerType[]
@@ -78,6 +79,7 @@ model Partner {
   lostReason         String?
   lostAt             DateTime?
   retryReminderDate  DateTime?
+  adCreativeUrl      String?
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 
@@ -103,14 +105,16 @@ model StageHistory {
 }
 
 model Transaction {
-  id               String   @id @default(cuid())
-  partnerId        String
-  date             DateTime
-  revenueAmount    Float
-  ownerProfitAmount Float
-  note             String?
-  createdByUserId  String
-  createdAt        DateTime @default(now())
+  id                  String   @id @default(cuid())
+  partnerId           String
+  date                DateTime
+  revenueAmount       Float
+  ownerProfitAmount   Float
+  partnerPayoutAmount Float    @default(0)
+  partnerPayoutPaid   Boolean  @default(false)
+  note                String?
+  createdByUserId     String
+  createdAt           DateTime @default(now())
 
   partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   createdBy User    @relation("CreatedByUser", fields: [createdByUserId], references: [id])
@@ -123,6 +127,7 @@ model Task {
   title            String
   dueDate          DateTime?
   isDone           Boolean   @default(false)
+  isAuto           Boolean   @default(false)
   createdAt        DateTime  @default(now())
 
   assignedTo User     @relation("AssignedUser", fields: [assignedToUserId], references: [id])

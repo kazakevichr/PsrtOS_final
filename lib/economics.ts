@@ -57,6 +57,46 @@ function monthRange(month: string) {
   return { start, end };
 }
 
+export type PeriodType = "day" | "week" | "month";
+
+/**
+ * Универсальный резолвер периода для отчётов владельца:
+ * day   -> одни сутки anchor-даты
+ * week  -> 7 дней, начиная с понедельника недели anchor-даты
+ * month -> календарный месяц anchor-даты (как раньше, для зарплаты)
+ * anchor передаётся строкой "YYYY-MM-DD" (day/week) или "YYYY-MM" (month).
+ */
+export function resolvePeriod(type: PeriodType, anchor?: string) {
+  if (type === "month") {
+    const month = anchor && /^\d{4}-\d{2}$/.test(anchor) ? anchor : new Date().toISOString().slice(0, 7);
+    const { start, end } = monthRange(month);
+    return { start, end, label: month };
+  }
+
+  const anchorDate = anchor && /^\d{4}-\d{2}-\d{2}$/.test(anchor) ? new Date(anchor + "T00:00:00Z") : new Date();
+
+  if (type === "day") {
+    const start = new Date(Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth(), anchorDate.getUTCDate()));
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
+    return { start, end, label: start.toISOString().slice(0, 10) };
+  }
+
+  // week: понедельник–воскресенье
+  const dow = anchorDate.getUTCDay() || 7; // 1..7, Sunday -> 7
+  const start = new Date(Date.UTC(anchorDate.getUTCFullYear(), anchorDate.getUTCMonth(), anchorDate.getUTCDate() - (dow - 1)));
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 7);
+  return { start, end, label: `${start.toISOString().slice(0, 10)} – ${new Date(end.getTime() - 86400000).toISOString().slice(0, 10)}` };
+}
+
+/**
+ * Сколько партнёру причитается с одной продажи и сколько ещё не выплачено.
+ */
+export function calcPartnerPayout(revenueAmount: number, ownerProfitAmount: number): number {
+  return Math.max(0, revenueAmount - ownerProfitAmount);
+}
+
 function monthsBetween(a: Date, b: Date): number {
   return (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth());
 }
@@ -66,8 +106,12 @@ function monthsBetween(a: Date, b: Date): number {
  * фикс + сумма KPI (партнёры, подключённые в этом месяце) + сумма бонусов
  * (% от прибыли активных партнёров этого сотрудника за месяц).
  */
-export async function computePayroll(userId: string, month: string) {
-  const { start, end } = monthRange(month);
+export async function computePayroll(
+  userId: string,
+  period: string | { start: Date; end: Date; label: string }
+) {
+  const resolved = typeof period === "string" ? { ...monthRange(period), label: period } : period;
+  const { start, end, label: month } = resolved;
 
   const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
 

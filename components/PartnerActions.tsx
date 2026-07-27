@@ -2,6 +2,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export default function PartnerActions({
   partnerId,
   currency,
@@ -12,6 +16,7 @@ export default function PartnerActions({
   isLost: boolean;
 }) {
   const router = useRouter();
+  const [date, setDate] = useState(todayStr());
   const [revenueAmount, setRevenueAmount] = useState("");
   const [note, setNote] = useState("");
   const [comment, setComment] = useState("");
@@ -25,11 +30,12 @@ export default function PartnerActions({
     await fetch(`/api/partners/${partnerId}/transactions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ revenueAmount, note }),
+      body: JSON.stringify({ date, revenueAmount, note }),
     });
     setBusy(false);
     setRevenueAmount("");
     setNote("");
+    setDate(todayStr());
     router.refresh();
   }
 
@@ -60,6 +66,8 @@ export default function PartnerActions({
       <div className="card">
         <h3 className="font-semibold mb-2">Добавить доход (транзакция)</h3>
         <form onSubmit={addTransaction} className="flex flex-col gap-2">
+          <label className="text-xs text-gray-500">Дата поступления</label>
+          <input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
           <input
             className="input"
             placeholder={`Выручка, ${currency}`}

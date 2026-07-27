@@ -15,6 +15,7 @@ type Project = {
   bonusThreshold: number;
   bonusMaxAmount: number | null;
   bonusPeriodMonths: number | null;
+  knowledgeBase: string;
   partnerTypes: { id: string; name: string; kpiAmount: number }[];
 };
 
@@ -45,6 +46,7 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
         bonusThreshold: Number(form.bonusThreshold),
         bonusMaxAmount: form.bonusMaxAmount === null ? null : Number(form.bonusMaxAmount),
         bonusPeriodMonths: form.bonusPeriodMonths === null ? null : Number(form.bonusPeriodMonths),
+        knowledgeBase: form.knowledgeBase,
       }),
     });
     setBusy(false);
@@ -118,6 +120,26 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
       </div>
 
       <button className="btn btn-primary" disabled={busy} onClick={save}>Сохранить настройки</button>
+
+      <div className="border-t pt-3">
+        <h4 className="text-sm font-semibold mb-2">
+          База знаний по проекту <span className="text-gray-400 font-normal">(видна менеджерам и используется ИИ-помощником)</span>
+        </h4>
+        <textarea
+          className="input"
+          rows={8}
+          placeholder="Опишите проект: что продаём, кто ЦА, условия, скрипты ответов на частые вопросы партнёров, оффер, ограничения и т.д."
+          value={form.knowledgeBase}
+          onChange={(e) => set("knowledgeBase", e.target.value)}
+        />
+        <button
+          className="btn btn-secondary mt-2 !px-3 !py-1 text-xs"
+          disabled={busy}
+          onClick={save}
+        >
+          Сохранить базу знаний
+        </button>
+      </div>
 
       <div className="border-t pt-3">
         <h4 className="text-sm font-semibold mb-2">Типы партнёров (для KPI по типу, напр. Музлото)</h4>

@@ -13,8 +13,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ru">
       <body>
         <Providers>
-          <Navbar />
-          <main className="max-w-6xl mx-auto px-4 py-6">{children}</main>
+          <div className="flex min-h-screen">
+            <Navbar />
+            <main className="flex-1 min-w-0 px-4 sm:px-8 py-6">{children}</main>
+          </div>
         </Providers>
       </body>
     </html>

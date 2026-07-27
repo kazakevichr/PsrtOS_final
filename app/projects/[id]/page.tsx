@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth";
 import { redirect, notFound } from "next/navigation";
+import Link from "next/link";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeHealth, parseFunnelStages } from "@/lib/economics";
@@ -32,6 +33,7 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     health: computeHealth(p, project),
     responsible: { id: p.responsible.id, name: p.responsible.name },
     partnerType: p.partnerType ? { name: p.partnerType.name } : null,
+    adCreativeUrl: p.adCreativeUrl,
   }));
 
   const managers = await prisma.user.findMany({
@@ -41,7 +43,12 @@ export default async function ProjectPage({ params }: { params: { id: string } }
 
   return (
     <div>
-      <h1 className="text-xl font-bold mb-1">{project.name}</h1>
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-xl font-bold">{project.name}</h1>
+        <Link href={`/projects/${project.id}/assistant`} className="btn btn-secondary !px-3 !py-1 text-sm">
+          🤖 ИИ-помощник
+        </Link>
+      </div>
       <p className="text-sm text-gray-500 mb-4">
         Валюта: {project.currency} · KPI: {project.kpiAmount > 0 ? `${project.kpiAmount} ${project.currency}` : "по типу партнёра"} · Бонус: {project.bonusEnabled ? `${project.bonusPercent}%` : "выключен"}
       </p>

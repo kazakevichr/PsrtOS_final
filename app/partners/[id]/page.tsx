@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeHealth } from "@/lib/economics";
 import PartnerActions from "@/components/PartnerActions";
+import PayoutToggle from "@/components/PayoutToggle";
 
 function fmtDate(d: Date | null) {
   if (!d) return "—";
@@ -33,6 +34,10 @@ export default async function PartnerPage({ params }: { params: { id: string } }
   const health = computeHealth(partner, partner.project);
   const totalRevenue = partner.transactions.reduce((s, t) => s + t.revenueAmount, 0);
   const totalProfit = partner.transactions.reduce((s, t) => s + t.ownerProfitAmount, 0);
+  const totalOwed = partner.transactions
+    .filter((t) => !t.partnerPayoutPaid)
+    .reduce((s, t) => s + t.partnerPayoutAmount, 0);
+  const isOwner = session.user.role === "OWNER";
   const badgeClass = { GREEN: "badge-green", YELLOW: "badge-yellow", RED: "badge-red" }[health];
   const badgeLabel = { GREEN: "🟢 Активен", YELLOW: "🟡 Нужно написать", RED: "🔴 Умирает" }[health];
 
@@ -62,6 +67,9 @@ export default async function PartnerPage({ params }: { params: { id: string } }
             <div><span className="text-gray-500">Клиентов (транзакций): </span><b>{partner.transactions.length}</b></div>
             <div><span className="text-gray-500">Выручка всего: </span><b>{totalRevenue.toLocaleString("ru-RU")} {partner.project.currency}</b></div>
             <div className="col-span-2"><span className="text-gray-500">Прибыль владельца всего: </span><b>{totalProfit.toLocaleString("ru-RU")} {partner.project.currency}</b></div>
+            {totalOwed > 0 && (
+              <div className="col-span-2 text-amber-700"><span className="text-gray-500">Должны партнёру: </span><b>{totalOwed.toLocaleString("ru-RU")} {partner.project.currency}</b></div>
+            )}
           </div>
           {partner.status === "LOST" && (
             <div className="mt-3 text-sm text-red-700 bg-red-50 rounded-lg p-2">
@@ -76,10 +84,16 @@ export default async function PartnerPage({ params }: { params: { id: string } }
           {partner.transactions.length === 0 && <p className="text-sm text-gray-400">Пока нет транзакций.</p>}
           <div className="space-y-1">
             {partner.transactions.map((t) => (
-              <div key={t.id} className="flex justify-between text-sm border-b last:border-0 py-1.5">
+              <div key={t.id} className="flex justify-between items-center text-sm border-b last:border-0 py-1.5 gap-2">
                 <span>{fmtDate(t.date)} {t.note ? `· ${t.note}` : ""}</span>
-                <span>
+                <span className="flex items-center gap-2 text-right">
                   Выручка {t.revenueAmount.toLocaleString("ru-RU")} → прибыль <b>{t.ownerProfitAmount.toLocaleString("ru-RU")}</b> {partner.project.currency}
+                  {t.partnerPayoutAmount > 0 && (
+                    <>
+                      <span className="text-gray-400">· партнёру {t.partnerPayoutAmount.toLocaleString("ru-RU")}</span>
+                      <PayoutToggle partnerId={partner.id} txId={t.id} paid={t.partnerPayoutPaid} canEdit={isOwner} />
+                    </>
+                  )}
                 </span>
               </div>
             ))}
