@@ -24,7 +24,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     );
   }
 
-  if (toStage === WORKING_STAGE && !partner.adCreativeUrl && !adCreativeUrl) {
+  // Для владельца требование ссылки на артефакт не действует — он может
+  // переносить партнёров по канбану без подтверждения.
+  if (toStage === WORKING_STAGE && !partner.adCreativeUrl && !adCreativeUrl && session.user.role !== "OWNER") {
     return NextResponse.json(
       { error: "Нужна ссылка/скриншот, что партнёр выложил рекламу, прежде чем перевести в «Работает»." },
       { status: 400 }
