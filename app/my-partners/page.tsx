@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import MyPartnersList from "@/components/MyPartnersList";
+import { INACTIVE_STAGE } from "@/lib/economics";
 
 export default async function MyPartnersPage() {
   const session = await getServerSession(authOptions);
@@ -10,7 +11,7 @@ export default async function MyPartnersPage() {
 
   const [partnersRaw, projects] = await Promise.all([
     prisma.partner.findMany({
-      where: { responsibleUserId: session.user.id, status: "ACTIVE" },
+      where: { responsibleUserId: session.user.id, status: "ACTIVE", stage: { not: INACTIVE_STAGE } },
       include: { project: true },
       orderBy: { createdAt: "desc" },
     }),
