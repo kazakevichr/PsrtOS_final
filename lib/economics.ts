@@ -189,16 +189,20 @@ export async function computePayroll(
       breakdown[key].bonus = 0;
     }
   }
-  const fixedAmount = qualifiesForSalary ? user.fixedSalary : 0;
+  // fixedAmount — оклад сотрудника как он настроен (для отображения, всегда).
+  // fixedAmountPaid — сколько из оклада реально начисляется в этом периоде
+  // (0, если порог по партнёрам ещё не набран). Именно fixedAmountPaid входит в totalAmount.
+  const fixedAmountPaid = qualifiesForSalary ? user.fixedSalary : 0;
 
   return {
     userId,
     userName: user.name,
     month,
-    fixedAmount,
+    fixedAmount: user.fixedSalary,
+    fixedAmountPaid,
     kpiTotal,
     bonusTotal,
-    totalAmount: fixedAmount + kpiTotal + bonusTotal,
+    totalAmount: fixedAmountPaid + kpiTotal + bonusTotal,
     breakdown,
     partnersCount,
     qualifiesForSalary,
