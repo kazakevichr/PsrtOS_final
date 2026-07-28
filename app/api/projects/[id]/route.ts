@@ -23,6 +23,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     "bonusMaxAmount",
     "bonusPeriodMonths",
     "knowledgeBase",
+    "funnelStages",
   ] as const;
 
   const data: Record<string, unknown> = {};
