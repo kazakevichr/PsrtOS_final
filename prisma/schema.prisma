@@ -40,7 +40,7 @@ model Project {
   bonusMaxAmount           Float?
   bonusPeriodMonths        Int?
   partnerPlan              Int?
-  funnelStages             String   @default("[\"Найдено\",\"Первый контакт\",\"Ведём переговоры\",\"Согласился\",\"Настройка\",\"Работает\",\"Есть продажи\",\"Активный партнёр\",\"Неактивный\"]")
+  funnelStages             String   @default("[\"Найдено\",\"Согласился\",\"Работает\",\"Есть продажи\",\"Неактивный\"]")
   healthGreenDays          Int      @default(7)
   healthYellowDays         Int      @default(29)
   isActive                 Boolean  @default(true)
