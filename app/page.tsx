@@ -12,6 +12,9 @@ function currentMonth() {
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
+  // Дашборд с общими цифрами компании — только для владельца.
+  // У менеджера свои результаты по проектам показаны наверху страницы "Зарплата".
+  if (session.user.role !== "OWNER") redirect("/payroll");
 
   const projects = await prisma.project.findMany({
     include: { partners: { include: { transactions: true } } },
