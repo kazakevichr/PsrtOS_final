@@ -122,7 +122,13 @@ export default async function PartnerPage({ params }: { params: { id: string } }
       </div>
 
       <div>
-        <PartnerActions partnerId={partner.id} currency={partner.project.currency} isLost={partner.status === "LOST"} isOwner={isOwner} />
+        <PartnerActions
+          partnerId={partner.id}
+          projectId={partner.projectId}
+          currency={partner.project.currency}
+          isLost={partner.status === "LOST"}
+          isOwner={isOwner}
+        />
       </div>
     </div>
   );
