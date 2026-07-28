@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { computePayroll, resolvePeriod } from "@/lib/economics";
+import { computePayroll, resolvePeriod, INACTIVE_STAGE } from "@/lib/economics";
 import CreateUserForm from "@/components/CreateUserForm";
 import EmployeeStatusToggle from "@/components/EmployeeStatusToggle";
 
@@ -17,7 +17,7 @@ export default async function UsersSettingsPage() {
   const rows = await Promise.all(
     users.map(async (u) => {
       const [activePartners, payroll] = await Promise.all([
-        prisma.partner.count({ where: { responsibleUserId: u.id, status: "ACTIVE" } }),
+        prisma.partner.count({ where: { responsibleUserId: u.id, status: "ACTIVE", stage: { not: INACTIVE_STAGE } } }),
         computePayroll(u.id, period),
       ]);
       return { ...u, activePartners, kpiTotal: payroll.kpiTotal };
