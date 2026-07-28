@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeHealth } from "@/lib/economics";
 import PartnerActions from "@/components/PartnerActions";
-import PayoutToggle from "@/components/PayoutToggle";
+import TransactionRow from "@/components/TransactionRow";
 
 function fmtDate(d: Date | null) {
   if (!d) return "—";
@@ -84,18 +84,13 @@ export default async function PartnerPage({ params }: { params: { id: string } }
           {partner.transactions.length === 0 && <p className="text-sm text-gray-400">Пока нет транзакций.</p>}
           <div className="space-y-1">
             {partner.transactions.map((t) => (
-              <div key={t.id} className="flex justify-between items-center text-sm border-b last:border-0 py-1.5 gap-2">
-                <span>{fmtDate(t.date)} {t.note ? `· ${t.note}` : ""}</span>
-                <span className="flex items-center gap-2 text-right">
-                  Выручка {t.revenueAmount.toLocaleString("ru-RU")} → прибыль <b>{t.ownerProfitAmount.toLocaleString("ru-RU")}</b> {partner.project.currency}
-                  {t.partnerPayoutAmount > 0 && (
-                    <>
-                      <span className="text-gray-400">· партнёру {t.partnerPayoutAmount.toLocaleString("ru-RU")}</span>
-                      <PayoutToggle partnerId={partner.id} txId={t.id} paid={t.partnerPayoutPaid} canEdit={isOwner} />
-                    </>
-                  )}
-                </span>
-              </div>
+              <TransactionRow
+                key={t.id}
+                partnerId={partner.id}
+                currency={partner.project.currency}
+                isOwner={isOwner}
+                transaction={t}
+              />
             ))}
           </div>
         </div>
@@ -127,7 +122,7 @@ export default async function PartnerPage({ params }: { params: { id: string } }
       </div>
 
       <div>
-        <PartnerActions partnerId={partner.id} currency={partner.project.currency} isLost={partner.status === "LOST"} />
+        <PartnerActions partnerId={partner.id} currency={partner.project.currency} isLost={partner.status === "LOST"} isOwner={isOwner} />
       </div>
     </div>
   );
