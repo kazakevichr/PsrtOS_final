@@ -36,6 +36,26 @@ export default async function PayrollPage({
       </div>
       <p className="text-sm text-gray-500 mb-4">Период: {period.label}</p>
 
+      {!isOwner && payrolls.length > 0 && (
+        <div className="mb-6">
+          <h2 className="font-semibold mb-3">Ваши результаты по проектам</h2>
+          {Object.keys(payrolls[0].breakdown).length === 0 ? (
+            <p className="text-sm text-gray-400">Пока нет данных по проектам за этот период.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {Object.entries(payrolls[0].breakdown).map(([project, v]) => (
+                <div key={project} className="card">
+                  <div className="font-semibold text-brand-700">{project}</div>
+                  <div className="mt-2 text-sm text-gray-500">KPI: <b className="text-gray-900">{v.kpi.toLocaleString("ru-RU")}</b></div>
+                  <div className="text-sm text-gray-500">Бонус: <b className="text-gray-900">{v.bonus.toLocaleString("ru-RU")}</b></div>
+                  <div className="text-sm text-gray-500">Доход по проекту: <b className="text-gray-900">{(v.kpi + v.bonus).toLocaleString("ru-RU")}</b></div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="space-y-4">
         {payrolls.length === 0 && <p className="text-sm text-gray-400">Нет данных.</p>}
         {payrolls.map((p) => (
@@ -44,6 +64,11 @@ export default async function PayrollPage({
               <h3 className="font-semibold">{p.userName}</h3>
               <span className="text-lg font-bold text-brand-700">{p.totalAmount.toLocaleString("ru-RU")} ₽</span>
             </div>
+            {!p.qualifiesForSalary && (
+              <p className="text-xs text-amber-600 mt-1">
+                Оклад и бонус начисляются от {p.minPartnersForSalary} партнёров. Сейчас партнёров: {p.partnersCount}.
+              </p>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-sm">
               <div><span className="text-gray-500">Оклад: </span>{p.fixedAmount.toLocaleString("ru-RU")}</div>
               <div><span className="text-gray-500">KPI: </span>{p.kpiTotal.toLocaleString("ru-RU")}</div>
