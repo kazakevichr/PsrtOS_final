@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { computePayroll, resolvePeriod } from "@/lib/economics";
 import CreateUserForm from "@/components/CreateUserForm";
 
 export default async function UsersSettingsPage() {
@@ -10,11 +11,22 @@ export default async function UsersSettingsPage() {
   if (session.user.role !== "OWNER") redirect("/");
 
   const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" } });
+  const period = resolvePeriod("month");
+
+  const rows = await Promise.all(
+    users.map(async (u) => {
+      const [activePartners, payroll] = await Promise.all([
+        prisma.partner.count({ where: { responsibleUserId: u.id, status: "ACTIVE" } }),
+        computePayroll(u.id, period),
+      ]);
+      return { ...u, activePartners, kpiTotal: payroll.kpiTotal };
+    })
+  );
 
   return (
     <div>
       <h1 className="text-xl font-bold mb-4">Сотрудники</h1>
-      <div className="card mb-4">
+      <div className="card mb-4 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-gray-500 border-b">
@@ -22,15 +34,21 @@ export default async function UsersSettingsPage() {
               <th className="py-2 pr-4">Email</th>
               <th className="py-2 pr-4">Роль</th>
               <th className="py-2 pr-4">Оклад</th>
+              <th className="py-2 pr-4">Начал работать</th>
+              <th className="py-2 pr-4">Активных партнёров</th>
+              <th className="py-2 pr-4">KPI ({period.label})</th>
             </tr>
           </thead>
           <tbody>
-            {users.map((u) => (
+            {rows.map((u) => (
               <tr key={u.id} className="border-b last:border-0">
                 <td className="py-2 pr-4">{u.name}</td>
                 <td className="py-2 pr-4">{u.email}</td>
                 <td className="py-2 pr-4">{u.role === "OWNER" ? "Владелец" : "Менеджер"}</td>
                 <td className="py-2 pr-4">{u.fixedSalary.toLocaleString("ru-RU")} ₽</td>
+                <td className="py-2 pr-4">{new Date(u.createdAt).toLocaleDateString("ru-RU")}</td>
+                <td className="py-2 pr-4">{u.activePartners}</td>
+                <td className="py-2 pr-4">{u.kpiTotal.toLocaleString("ru-RU")} ₽</td>
               </tr>
             ))}
           </tbody>
