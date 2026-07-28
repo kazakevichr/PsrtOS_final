@@ -82,7 +82,9 @@ export default function KanbanBoard({
   async function moveStage(partner: Partner, toStage: string) {
     let adCreativeUrl: string | undefined;
 
-    if (toStage === WORKING_STAGE && !partner.adCreativeUrl) {
+    // Владелец переносит партнёров по канбану без подтверждения и без
+    // обязательной ссылки на артефакт — ограничение действует только для менеджеров.
+    if (toStage === WORKING_STAGE && !partner.adCreativeUrl && !isOwner) {
       const url = window.prompt(
         "Перед переводом в «Работает» нужна ссылка/скриншот, что партнёр выложил рекламу (например, ссылка на пост или файл в облаке):"
       );
@@ -173,6 +175,19 @@ export default function KanbanBoard({
                       </div>
                       <div className="text-xs text-gray-500 mt-1">{p.responsible.name}</div>
                       {p.partnerType && <div className="text-xs text-gray-400">{p.partnerType.name}</div>}
+                      {p.adCreativeUrl ? (
+                        <a
+                          href={p.adCreativeUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-brand-700 hover:underline inline-flex items-center gap-1 mt-1"
+                          title="Открыть ссылку на артефакт"
+                        >
+                          🔗 Артефакт есть
+                        </a>
+                      ) : (
+                        <div className="text-xs text-gray-400 mt-1">🔗 Артефакта нет</div>
+                      )}
                       <div className="flex gap-1 mt-2 items-center">
                         {stageIdx > 0 && (
                           <button
