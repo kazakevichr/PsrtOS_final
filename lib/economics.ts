@@ -11,6 +11,22 @@ export function calcOwnerProfit(revenueAmount: number, project: Project): number
   return afterPartnerCommission * (project.ownerProfitPercent / 100);
 }
 
+/**
+ * Стадия воронки, означающая, что партнёр больше не в работе.
+ * Партнёр может попасть сюда через Kanban (кнопки/перетаскивание),
+ * при этом status в БД остаётся "ACTIVE" — учитывать это нужно
+ * везде, где считаются "активные" партнёры (дашборд, сотрудники и т.д.).
+ */
+export const INACTIVE_STAGE = "Неактивный";
+
+/**
+ * Партнёр считается активным для отчётов/счётчиков, если он не помечен
+ * упущенным (status !== "LOST") и не находится в стадии "Неактивный".
+ */
+export function isPartnerActive(partner: { status: string; stage: string }): boolean {
+  return partner.status === "ACTIVE" && partner.stage !== INACTIVE_STAGE;
+}
+
 export type Health = "GREEN" | "YELLOW" | "RED";
 
 /**
