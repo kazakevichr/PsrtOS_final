@@ -17,22 +17,40 @@ export default async function Navbar() {
     select: { id: true, name: true },
   });
 
-  const topLinks = [{ href: "/", label: "Дашборд" }];
-  const bottomLinks = [{ href: "/assistant", label: "🤖 ИИ-помощник" }];
-  if (isOwner) {
-    bottomLinks.push({ href: "/partners", label: "Партнёры" });
-  } else {
-    bottomLinks.push({ href: "/my-partners", label: "Мои партнёры" });
-  }
-  bottomLinks.push(
-    { href: "/tasks", label: "Задачи" },
-    { href: "/payroll", label: "Зарплата" },
-    { href: "/lost", label: "Упущенные" }
+  const linkClass = "px-3 py-2 rounded-lg hover:bg-gray-50 hover:text-brand-700";
+
+  const navLink = (href: string, label: string) => (
+    <Link key={href} href={href} className={linkClass}>
+      {label}
+    </Link>
   );
-  if (isOwner) {
-    bottomLinks.push({ href: "/settings/users", label: "Сотрудники" });
-    bottomLinks.push({ href: "/settings/projects", label: "Настройки" });
-  }
+
+  const kanbanDropdown = <ProjectsNavDropdown key="kanban" projects={projects} />;
+  const dashboardLink = navLink("/", "Дашборд");
+  // Раньше называлась "ИИ-помощник" — теперь раздел "Проекты" (по запросу).
+  const projectsLink = navLink("/assistant", "🤖 Проекты");
+  const partnersLink = isOwner ? navLink("/partners", "Партнёры") : navLink("/my-partners", "Мои партнёры");
+  const tasksLink = navLink("/tasks", "Задачи");
+  const payrollLink = navLink("/payroll", "Зарплата");
+  const lostLink = navLink("/lost", "Упущенные");
+
+  // У владельца порядок вкладок прежний (только новые названия).
+  // У менеджера — отдельный порядок: Зарплата, Мои партнёры, Канбан, Проекты,
+  // Упущенные, Задачи. Раздела "Дашборд" у менеджера больше нет — его данные
+  // теперь показаны наверху страницы "Зарплата".
+  const items = isOwner
+    ? [
+        dashboardLink,
+        kanbanDropdown,
+        projectsLink,
+        partnersLink,
+        tasksLink,
+        payrollLink,
+        lostLink,
+        navLink("/settings/users", "Сотрудники"),
+        navLink("/settings/projects", "Настройки"),
+      ]
+    : [payrollLink, partnersLink, kanbanDropdown, projectsLink, lostLink, tasksLink];
 
   return (
     <SidebarShell
@@ -45,17 +63,7 @@ export default async function Navbar() {
         </>
       }
     >
-      {topLinks.map((l) => (
-        <Link key={l.href} href={l.href} className="px-3 py-2 rounded-lg hover:bg-gray-50 hover:text-brand-700">
-          {l.label}
-        </Link>
-      ))}
-      <ProjectsNavDropdown projects={projects} />
-      {bottomLinks.map((l) => (
-        <Link key={l.href} href={l.href} className="px-3 py-2 rounded-lg hover:bg-gray-50 hover:text-brand-700">
-          {l.label}
-        </Link>
-      ))}
+      {items}
     </SidebarShell>
   );
 }

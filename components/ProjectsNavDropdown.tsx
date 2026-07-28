@@ -15,7 +15,7 @@ export default function ProjectsNavDropdown({ projects }: { projects: { id: stri
         onClick={() => setOpen((v) => !v)}
         className={`w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 hover:text-brand-700 ${isOnProjectPage ? "text-brand-700 font-medium" : ""}`}
       >
-        <span>Проекты</span>
+        <span>Канбан</span>
         <span className={`transition-transform text-xs ${open ? "rotate-180" : ""}`}>▾</span>
       </button>
       {open && (
