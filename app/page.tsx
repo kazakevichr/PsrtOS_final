@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { computePayroll } from "@/lib/economics";
+import { computePayroll, isPartnerActive } from "@/lib/economics";
 import Link from "next/link";
 
 function currentMonth() {
@@ -36,7 +36,7 @@ export default async function DashboardPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {projects.map((p) => {
-          const activePartners = p.partners.filter((x) => x.status === "ACTIVE");
+          const activePartners = p.partners.filter(isPartnerActive);
           const monthProfit = p.partners
             .flatMap((x) => x.transactions)
             .filter((t) => t.date >= start && t.date <= end)
@@ -76,7 +76,7 @@ export default async function DashboardPage() {
                   <tr key={m.id} className="border-b last:border-0">
                     <td className="py-2 pr-4 font-medium">{m.name}</td>
                     <td className="py-2 pr-4">{m.partners.length}</td>
-                    <td className="py-2 pr-4">{m.partners.filter((x) => x.status === "ACTIVE").length}</td>
+                    <td className="py-2 pr-4">{m.partners.filter(isPartnerActive).length}</td>
                     <td className="py-2 pr-4">{payrolls[i].kpiTotal.toLocaleString("ru-RU")} ₽</td>
                     <td className="py-2 pr-4">{payrolls[i].bonusTotal.toLocaleString("ru-RU")} ₽</td>
                     <td className="py-2 pr-4 font-semibold">{payrolls[i].totalAmount.toLocaleString("ru-RU")} ₽</td>
