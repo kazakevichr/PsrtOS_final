@@ -43,10 +43,15 @@ export default async function ProjectPage({ params }: { params: { id: string } }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-xl font-bold">{project.name}</h1>
-        <Link href={`/projects/${project.id}/assistant`} className="btn btn-secondary !px-3 !py-1 text-sm">
-          🤖 ИИ-помощник
+      <div className="flex items-center justify-between mb-1 gap-2">
+        <h1 className="text-xl font-bold truncate">{project.name}</h1>
+        <Link
+          href={`/projects/${project.id}/assistant`}
+          className="btn btn-secondary !px-3 !py-1 text-sm shrink-0"
+          title="ИИ-помощник"
+        >
+          <span aria-hidden="true">🤖</span>
+          <span className="hidden sm:inline"> ИИ-помощник</span>
         </Link>
       </div>
       <p className="text-sm text-gray-500 mb-4">
