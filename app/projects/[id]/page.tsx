@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { computeHealth, parseFunnelStages } from "@/lib/economics";
 import KanbanBoard from "@/components/KanbanBoard";
 import AssistantChat from "@/components/AssistantChat";
+import CollapsibleCard from "@/components/CollapsibleCard";
 
 export default async function ProjectPage({ params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -62,11 +63,13 @@ export default async function ProjectPage({ params }: { params: { id: string } }
         Валюта: {project.currency} · KPI: {project.kpiAmount > 0 ? `${project.kpiAmount} ${project.currency}` : "по типу партнёра"} · Бонус: {project.bonusEnabled ? `${project.bonusPercent}%` : "выключен"}
       </p>
 
-      {/* Информация по проекту + ИИ-помощник — сразу на странице, только на десктопе. */}
-      <div className="hidden md:grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="lg:col-span-1">
-          <div className="card">
-            <h3 className="font-semibold mb-2">Информация по проекту</h3>
+      {/* Канбан — 70% ширины, информация по проекту + ИИ-помощник — 30%,
+          оба раскрывающиеся, чтобы длинное описание не занимало место.
+          На мобильных этот блок скрыт — там доступ к помощнику через
+          компактную ссылку в шапке выше. */}
+      <div className="flex flex-col md:flex-row gap-6 items-start">
+        <div className="hidden md:block md:w-[30%] shrink-0 space-y-4">
+          <CollapsibleCard title="Информация по проекту">
             {project.knowledgeBase?.trim() ? (
               <div className="text-sm whitespace-pre-wrap text-gray-700">{project.knowledgeBase}</div>
             ) : (
@@ -80,22 +83,24 @@ export default async function ProjectPage({ params }: { params: { id: string } }
                 )}
               </p>
             )}
-          </div>
+          </CollapsibleCard>
+          <CollapsibleCard title="ИИ-помощник по проекту">
+            <AssistantChat projectId={project.id} bare />
+          </CollapsibleCard>
         </div>
-        <div className="lg:col-span-2">
-          <AssistantChat projectId={project.id} />
+
+        <div className="md:w-[70%] flex-1 min-w-0">
+          <KanbanBoard
+            projectId={project.id}
+            stages={parseFunnelStages(project)}
+            partners={partners}
+            managers={managers}
+            partnerTypes={project.partnerTypes}
+            isOwner={session.user.role === "OWNER"}
+            currentUserId={session.user.id}
+          />
         </div>
       </div>
-
-      <KanbanBoard
-        projectId={project.id}
-        stages={parseFunnelStages(project)}
-        partners={partners}
-        managers={managers}
-        partnerTypes={project.partnerTypes}
-        isOwner={session.user.role === "OWNER"}
-        currentUserId={session.user.id}
-      />
     </div>
   );
 }
