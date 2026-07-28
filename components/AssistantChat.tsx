@@ -3,7 +3,15 @@ import { useState } from "react";
 
 type Message = { role: "user" | "assistant"; content: string };
 
-export default function AssistantChat({ projectId }: { projectId: string }) {
+export default function AssistantChat({
+  projectId,
+  bare = false,
+}: {
+  projectId: string;
+  // bare=true — без собственной обёртки-карточки и заголовка (используется,
+  // когда чат уже вложен в раскрывающуюся карточку CollapsibleCard).
+  bare?: boolean;
+}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [question, setQuestion] = useState("");
   const [busy, setBusy] = useState(false);
@@ -37,9 +45,8 @@ export default function AssistantChat({ projectId }: { projectId: string }) {
     }
   }
 
-  return (
-    <div className="card flex flex-col h-[600px]">
-      <h3 className="font-semibold mb-2">ИИ-помощник по проекту</h3>
+  const body = (
+    <>
       <div className="flex-1 overflow-y-auto space-y-3 mb-3 text-sm">
         {messages.length === 0 && (
           <p className="text-gray-400">
@@ -64,6 +71,17 @@ export default function AssistantChat({ projectId }: { projectId: string }) {
         />
         <button className="btn btn-primary" disabled={busy} type="submit">Спросить</button>
       </form>
+    </>
+  );
+
+  if (bare) {
+    return <div className="flex flex-col h-[500px]">{body}</div>;
+  }
+
+  return (
+    <div className="card flex flex-col h-[600px]">
+      <h3 className="font-semibold mb-2">ИИ-помощник по проекту</h3>
+      {body}
     </div>
   );
 }
