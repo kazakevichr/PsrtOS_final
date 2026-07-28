@@ -28,7 +28,10 @@ export default async function Navbar() {
     { href: "/payroll", label: "Зарплата" },
     { href: "/lost", label: "Упущенные" }
   );
-  if (isOwner) bottomLinks.push({ href: "/settings/projects", label: "Настройки" });
+  if (isOwner) {
+    bottomLinks.push({ href: "/settings/users", label: "Сотрудники" });
+    bottomLinks.push({ href: "/settings/projects", label: "Настройки" });
+  }
 
   return (
     <aside className="w-56 shrink-0 border-r border-gray-200 bg-white min-h-screen flex flex-col">
