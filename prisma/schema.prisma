@@ -108,6 +108,7 @@ model Transaction {
   id                  String   @id @default(cuid())
   partnerId           String
   date                DateTime
+  period              String   @default("day")
   revenueAmount       Float
   ownerProfitAmount   Float
   partnerPayoutAmount Float    @default(0)
