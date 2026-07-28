@@ -4,10 +4,17 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { calcOwnerProfit, calcPartnerPayout } from "@/lib/economics";
 
+const ALLOWED_PERIODS = ["day", "week", "month"];
+
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const { date, revenueAmount, note } = await req.json();
+  if (session.user.role !== "OWNER") {
+    return NextResponse.json({ error: "Только руководитель может указывать выручку." }, { status: 403 });
+  }
+
+  const { date, revenueAmount, note, period } = await req.json();
+  const resolvedPeriod = ALLOWED_PERIODS.includes(period) ? period : "day";
 
   const partner = await prisma.partner.findUnique({
     where: { id: params.id },
@@ -23,6 +30,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     data: {
       partnerId: params.id,
       date: txDate,
+      period: resolvedPeriod,
       revenueAmount: Number(revenueAmount),
       ownerProfitAmount,
       partnerPayoutAmount,
