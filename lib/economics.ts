@@ -177,14 +177,31 @@ export async function computePayroll(
     }
   }
 
+  // Оклад и бонус начисляются только сотрудникам, набравшим от 15 партнёров
+  // (любых, за всё время). KPI начисляется всегда, независимо от этого порога.
+  const MIN_PARTNERS_FOR_SALARY = 15;
+  const partnersCount = partners.length;
+  const qualifiesForSalary = partnersCount >= MIN_PARTNERS_FOR_SALARY;
+
+  if (!qualifiesForSalary) {
+    bonusTotal = 0;
+    for (const key of Object.keys(breakdown)) {
+      breakdown[key].bonus = 0;
+    }
+  }
+  const fixedAmount = qualifiesForSalary ? user.fixedSalary : 0;
+
   return {
     userId,
     userName: user.name,
     month,
-    fixedAmount: user.fixedSalary,
+    fixedAmount,
     kpiTotal,
     bonusTotal,
-    totalAmount: user.fixedSalary + kpiTotal + bonusTotal,
+    totalAmount: fixedAmount + kpiTotal + bonusTotal,
     breakdown,
+    partnersCount,
+    qualifiesForSalary,
+    minPartnersForSalary: MIN_PARTNERS_FOR_SALARY,
   };
 }
