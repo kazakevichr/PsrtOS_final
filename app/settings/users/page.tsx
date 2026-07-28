@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computePayroll, resolvePeriod } from "@/lib/economics";
 import CreateUserForm from "@/components/CreateUserForm";
+import EmployeeStatusToggle from "@/components/EmployeeStatusToggle";
 
 export default async function UsersSettingsPage() {
   const session = await getServerSession(authOptions);
@@ -37,11 +38,13 @@ export default async function UsersSettingsPage() {
               <th className="py-2 pr-4">Начал работать</th>
               <th className="py-2 pr-4">Активных партнёров</th>
               <th className="py-2 pr-4">KPI ({period.label})</th>
+              <th className="py-2 pr-4">Статус</th>
+              <th className="py-2 pr-4"></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((u) => (
-              <tr key={u.id} className="border-b last:border-0">
+              <tr key={u.id} className={`border-b last:border-0 ${!u.isActive ? "opacity-50" : ""}`}>
                 <td className="py-2 pr-4">{u.name}</td>
                 <td className="py-2 pr-4">{u.email}</td>
                 <td className="py-2 pr-4">{u.role === "OWNER" ? "Владелец" : "Менеджер"}</td>
@@ -49,6 +52,10 @@ export default async function UsersSettingsPage() {
                 <td className="py-2 pr-4">{new Date(u.createdAt).toLocaleDateString("ru-RU")}</td>
                 <td className="py-2 pr-4">{u.activePartners}</td>
                 <td className="py-2 pr-4">{u.kpiTotal.toLocaleString("ru-RU")} ₽</td>
+                <td className="py-2 pr-4">{u.isActive ? "Активен" : "Уволен"}</td>
+                <td className="py-2 pr-4">
+                  {u.role !== "OWNER" && <EmployeeStatusToggle userId={u.id} isActive={u.isActive} />}
+                </td>
               </tr>
             ))}
           </tbody>
