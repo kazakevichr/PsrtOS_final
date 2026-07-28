@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeHealth, parseFunnelStages } from "@/lib/economics";
 import KanbanBoard from "@/components/KanbanBoard";
+import AssistantChat from "@/components/AssistantChat";
 
 export default async function ProjectPage({ params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
@@ -45,9 +46,12 @@ export default async function ProjectPage({ params }: { params: { id: string } }
     <div>
       <div className="flex items-center justify-between mb-1 gap-2">
         <h1 className="text-xl font-bold truncate">{project.name}</h1>
+        {/* На мобильных — компактная ссылка на отдельную страницу помощника.
+            На десктопе помощник встроен прямо в страницу проекта (ниже), поэтому
+            здесь он скрыт. */}
         <Link
           href={`/projects/${project.id}/assistant`}
-          className="btn btn-secondary !px-3 !py-1 text-sm shrink-0"
+          className="btn btn-secondary !px-3 !py-1 text-sm shrink-0 md:hidden"
           title="ИИ-помощник"
         >
           <span aria-hidden="true">🤖</span>
@@ -57,6 +61,32 @@ export default async function ProjectPage({ params }: { params: { id: string } }
       <p className="text-sm text-gray-500 mb-4">
         Валюта: {project.currency} · KPI: {project.kpiAmount > 0 ? `${project.kpiAmount} ${project.currency}` : "по типу партнёра"} · Бонус: {project.bonusEnabled ? `${project.bonusPercent}%` : "выключен"}
       </p>
+
+      {/* Информация по проекту + ИИ-помощник — сразу на странице, только на десктопе. */}
+      <div className="hidden md:grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="lg:col-span-1">
+          <div className="card">
+            <h3 className="font-semibold mb-2">Информация по проекту</h3>
+            {project.knowledgeBase?.trim() ? (
+              <div className="text-sm whitespace-pre-wrap text-gray-700">{project.knowledgeBase}</div>
+            ) : (
+              <p className="text-sm text-gray-400">
+                Владелец пока не заполнил описание проекта.
+                {session.user.role === "OWNER" && (
+                  <>
+                    {" "}
+                    <Link href="/settings/projects" className="text-brand-700 hover:underline">Заполнить →</Link>
+                  </>
+                )}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="lg:col-span-2">
+          <AssistantChat projectId={project.id} />
+        </div>
+      </div>
+
       <KanbanBoard
         projectId={project.id}
         stages={parseFunnelStages(project)}
