@@ -34,20 +34,21 @@ export default async function Navbar() {
   const payrollLink = navLink("/payroll", "Зарплата");
   const lostLink = navLink("/lost", "Упущенные");
 
-  // У владельца порядок вкладок прежний (только новые названия).
-  // У менеджера — отдельный порядок: Зарплата, Мои партнёры, Канбан, Проекты,
-  // Упущенные, Задачи. Раздела "Дашборд" у менеджера больше нет — его данные
-  // теперь показаны наверху страницы "Зарплата".
+  // У владельца порядок вкладок: Дашборд, Зарплата, Сотрудники, Партнёры,
+  // Канбан, Упущенные, Задачи, Настройки. Отдельная ссылка "Проекты"
+  // (ИИ-помощник) владельцу не нужна — помощник уже встроен в страницу проекта.
+  // У менеджера — свой порядок: Зарплата, Мои партнёры, Канбан, Проекты,
+  // Упущенные, Задачи. Раздела "Дашборд" у менеджера нет — его данные
+  // показаны наверху страницы "Зарплата".
   const items = isOwner
     ? [
         dashboardLink,
-        kanbanDropdown,
-        projectsLink,
-        partnersLink,
-        tasksLink,
         payrollLink,
-        lostLink,
         navLink("/settings/users", "Сотрудники"),
+        partnersLink,
+        kanbanDropdown,
+        lostLink,
+        tasksLink,
         navLink("/settings/projects", "Настройки"),
       ]
     : [payrollLink, partnersLink, kanbanDropdown, projectsLink, lostLink, tasksLink];

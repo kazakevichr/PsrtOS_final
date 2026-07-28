@@ -8,16 +8,20 @@ function todayStr() {
 
 export default function PartnerActions({
   partnerId,
+  projectId,
   currency,
   isLost,
   isOwner,
 }: {
   partnerId: string;
+  projectId: string;
   currency: string;
   isLost: boolean;
   isOwner: boolean;
 }) {
   const router = useRouter();
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [date, setDate] = useState(todayStr());
   const [period, setPeriod] = useState("day");
   const [revenueAmount, setRevenueAmount] = useState("");
@@ -75,6 +79,27 @@ export default function PartnerActions({
     router.refresh();
   }
 
+  async function removePartner() {
+    const ok = window.confirm(
+      "Удалить этого партнёра навсегда? Вся его выручка, история и комментарии будут удалены без возможности восстановления."
+    );
+    if (!ok) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/partners/${partnerId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setDeleteError(data?.error || "Не удалось удалить партнёра");
+        return;
+      }
+      router.push(`/projects/${projectId}`);
+      router.refresh();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       {isOwner ? (
@@ -126,6 +151,19 @@ export default function PartnerActions({
             <input className="input" type="date" value={retryDate} onChange={(e) => setRetryDate(e.target.value)} />
             <button className="btn btn-secondary" type="submit">Сохранить</button>
           </form>
+        </div>
+      )}
+
+      {isOwner && (
+        <div className="card border border-red-100">
+          <h3 className="font-semibold mb-1 text-red-700">Удалить партнёра</h3>
+          <p className="text-xs text-gray-500 mb-2">
+            Безвозвратно удаляет партнёра вместе со всей выручкой, историей стадий и комментариями. Например, для тестовых записей.
+          </p>
+          {deleteError && <p className="text-sm text-red-600 mb-2">{deleteError}</p>}
+          <button className="btn btn-secondary !text-red-700" disabled={deleting} onClick={removePartner}>
+            {deleting ? "Удаление…" : "Удалить навсегда"}
+          </button>
         </div>
       )}
     </div>
