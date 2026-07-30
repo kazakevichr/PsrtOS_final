@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeHealth } from "@/lib/economics";
+import { socialHref } from "@/lib/links";
 import PartnerActions from "@/components/PartnerActions";
 import TransactionRow from "@/components/TransactionRow";
 
@@ -53,8 +54,36 @@ export default async function PartnerPage({ params }: { params: { id: string } }
             <span className={badgeClass}>{badgeLabel}</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4 text-sm">
-            <div><span className="text-gray-500">Instagram: </span>{partner.instagram || "—"}</div>
-            <div><span className="text-gray-500">Telegram: </span>{partner.telegram || "—"}</div>
+            <div>
+              <span className="text-gray-500">Instagram: </span>
+              {partner.instagram ? (
+                <a
+                  href={socialHref(partner.instagram, "instagram")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-700 hover:underline break-all"
+                >
+                  {partner.instagram}
+                </a>
+              ) : (
+                "—"
+              )}
+            </div>
+            <div>
+              <span className="text-gray-500">Telegram: </span>
+              {partner.telegram ? (
+                <a
+                  href={socialHref(partner.telegram, "telegram")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-brand-700 hover:underline break-all"
+                >
+                  {partner.telegram}
+                </a>
+              ) : (
+                "—"
+              )}
+            </div>
             <div><span className="text-gray-500">Телефон: </span>{partner.phone || "—"}</div>
             <div><span className="text-gray-500">Ответственный: </span>{partner.responsible.name}</div>
             <div><span className="text-gray-500">Статус: </span>{partner.stage}</div>
