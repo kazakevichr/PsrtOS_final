@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeHealth } from "@/lib/economics";
 import { bestPartnerLink } from "@/lib/links";
+import ArtifactLink from "@/components/ArtifactLink";
 
 export default async function AllPartnersPage({
   searchParams,
@@ -94,6 +95,7 @@ export default async function AllPartnersPage({
               <th className="py-2 pr-4">Здоровье</th>
               <th className="py-2 pr-4">Телефон</th>
               <th className="py-2 pr-4">Ссылка</th>
+              <th className="py-2 pr-4">Артефакт</th>
               <th className="py-2 pr-4">Выручка</th>
             </tr>
           </thead>
@@ -128,12 +130,15 @@ export default async function AllPartnersPage({
                       <span className="text-gray-400">—</span>
                     )}
                   </td>
+                  <td className="py-2 pr-4">
+                    <ArtifactLink url={p.adCreativeUrl} />
+                  </td>
                   <td className="py-2 pr-4">{revenue.toLocaleString("ru-RU")} {p.project.currency}</td>
                 </tr>
               );
             })}
             {partners.length === 0 && (
-              <tr><td colSpan={8} className="py-4 text-center text-gray-400">Нет партнёров по выбранным фильтрам.</td></tr>
+              <tr><td colSpan={9} className="py-4 text-center text-gray-400">Нет партнёров по выбранным фильтрам.</td></tr>
             )}
           </tbody>
         </table>
