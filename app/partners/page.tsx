@@ -4,6 +4,7 @@ import Link from "next/link";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computeHealth } from "@/lib/economics";
+import { bestPartnerLink } from "@/lib/links";
 
 export default async function AllPartnersPage({
   searchParams,
@@ -92,6 +93,7 @@ export default async function AllPartnersPage({
               <th className="py-2 pr-4">Стадия</th>
               <th className="py-2 pr-4">Здоровье</th>
               <th className="py-2 pr-4">Телефон</th>
+              <th className="py-2 pr-4">Ссылка</th>
               <th className="py-2 pr-4">Выручка</th>
             </tr>
           </thead>
@@ -99,6 +101,7 @@ export default async function AllPartnersPage({
             {partners.map((p) => {
               const health = computeHealth(p, p.project);
               const revenue = p.transactions.reduce((s, t) => s + t.revenueAmount, 0);
+              const link = bestPartnerLink(p);
               return (
                 <tr key={p.id} className="border-b last:border-0">
                   <td className="py-2 pr-4 font-medium">
@@ -111,12 +114,26 @@ export default async function AllPartnersPage({
                     <span className={badgeClass[health]}>{badgeLabel[health]}</span>
                   </td>
                   <td className="py-2 pr-4">{p.phone || "—"}</td>
+                  <td className="py-2 pr-4">
+                    {link ? (
+                      <a
+                        href={link.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-brand-700 hover:underline"
+                      >
+                        {link.label} ↗
+                      </a>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                  </td>
                   <td className="py-2 pr-4">{revenue.toLocaleString("ru-RU")} {p.project.currency}</td>
                 </tr>
               );
             })}
             {partners.length === 0 && (
-              <tr><td colSpan={7} className="py-4 text-center text-gray-400">Нет партнёров по выбранным фильтрам.</td></tr>
+              <tr><td colSpan={8} className="py-4 text-center text-gray-400">Нет партнёров по выбранным фильтрам.</td></tr>
             )}
           </tbody>
         </table>
