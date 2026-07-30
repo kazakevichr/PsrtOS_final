@@ -24,6 +24,7 @@ export default async function MyPartnersPage() {
     phone: p.phone,
     instagram: p.instagram,
     telegram: p.telegram,
+    adCreativeUrl: p.adCreativeUrl,
     stage: p.stage,
     status: p.status,
     projectId: p.projectId,
