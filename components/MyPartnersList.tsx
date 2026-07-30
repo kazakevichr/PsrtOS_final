@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import ArtifactLink from "@/components/ArtifactLink";
 
 type Partner = {
   id: string;
@@ -9,6 +10,7 @@ type Partner = {
   phone: string | null;
   instagram: string | null;
   telegram: string | null;
+  adCreativeUrl?: string | null;
   stage: string;
   status: string;
   projectId: string;
@@ -137,6 +139,7 @@ export default function MyPartnersList({
                 <th className="py-2 pr-4">Телефон</th>
                 <th className="py-2 pr-4">Instagram</th>
                 <th className="py-2 pr-4">Telegram</th>
+                <th className="py-2 pr-4">Артефакт</th>
                 <th className="py-2 pr-4"></th>
               </tr>
             </thead>
@@ -159,6 +162,9 @@ export default function MyPartnersList({
                       <td className="py-2 pr-4">
                         <input className="input" value={form.telegram ?? ""} onChange={(e) => setForm({ ...form, telegram: e.target.value })} />
                       </td>
+                      <td className="py-2 pr-4">
+                        <ArtifactLink url={p.adCreativeUrl} />
+                      </td>
                       <td className="py-2 pr-4 whitespace-nowrap">
                         <button className="btn btn-primary !px-2 !py-1 text-xs mr-1" disabled={busy} onClick={() => save(p.id)}>
                           Сохранить
@@ -180,6 +186,9 @@ export default function MyPartnersList({
                       <td className="py-2 pr-4">{p.phone || "—"}</td>
                       <td className="py-2 pr-4">{p.instagram || "—"}</td>
                       <td className="py-2 pr-4">{p.telegram || "—"}</td>
+                      <td className="py-2 pr-4">
+                        <ArtifactLink url={p.adCreativeUrl} />
+                      </td>
                       <td className="py-2 pr-4">
                         <button className="btn btn-secondary !px-2 !py-1 text-xs" onClick={() => startEdit(p)}>
                           Редактировать
