@@ -41,22 +41,29 @@ async function gget(path: string, params: Record<string, string>, token: string)
 
 // IG-аккаунты, назначенные системному пользователю напрямую (META_IG_IDS через
 // запятую); запасной путь — через страницы Facebook (me/accounts)
-async function discoverAccounts(token: string) {
+async function discoverAccounts(token: string, errors: string[] = []) {
   const accounts: any[] = [];
   const ids = (process.env.META_IG_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
 
   if (ids.length) {
     for (const id of ids) {
-      const ig = await gget(id, {
-        fields: "id,username,followers_count,media_count,profile_picture_url",
-      }, token);
-      accounts.push({
-        igId: ig.id,
-        username: ig.username,
-        followers: ig.followers_count,
-        mediaCount: ig.media_count,
-        avatar: ig.profile_picture_url,
-      });
+      // Один недоступный аккаунт (отвязали в Business Manager, ограничение
+      // Меты) не должен хоронить сбор по остальным: 19.08 ровно так пропал
+      // весь сбор из-за одного superfit24_training.
+      try {
+        const ig = await gget(id, {
+          fields: "id,username,followers_count,media_count,profile_picture_url",
+        }, token);
+        accounts.push({
+          igId: ig.id,
+          username: ig.username,
+          followers: ig.followers_count,
+          mediaCount: ig.media_count,
+          avatar: ig.profile_picture_url,
+        });
+      } catch (e: any) {
+        errors.push(`${id}: ${e.message}`);
+      }
     }
     return accounts;
   }
@@ -172,7 +179,7 @@ export async function runCollect() {
 
   let accounts: any[] = [];
   try {
-    accounts = await discoverAccounts(token);
+    accounts = await discoverAccounts(token, summary.errors);
   } catch (e: any) {
     summary.errors.push(`discover: ${e.message}`);
   }
