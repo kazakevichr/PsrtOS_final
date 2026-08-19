@@ -22,6 +22,36 @@ const LANG_NAMES: Record<string, string> = {
 
 const fmt = (n: any) => (n == null ? "—" : Number(n).toLocaleString("ru-RU"));
 
+// Рост/снижение к прошлому периоду: ▲ +12% зелёным, ▼ −5% красным
+function Delta({ cur, prev }: { cur: number; prev: number }) {
+  if (!prev) return cur > 0 ? <span className="text-gray-400">новое</span> : null;
+  const pct = ((cur - prev) / prev) * 100;
+  if (Math.abs(pct) < 0.05) return <span className="text-gray-400">без изменений</span>;
+  return (
+    <span className={pct > 0 ? "text-green-600" : "text-red-600"}>
+      {pct > 0 ? "▲" : "▼"} {Math.abs(pct) >= 100 ? Math.round(Math.abs(pct)) : Math.abs(pct).toFixed(1)}%
+    </span>
+  );
+}
+
+// Мини-график тренда (как у CoinMarketCap): линия без осей и подписей
+function Spark({ points, up }: { points: number[]; up: boolean }) {
+  if (points.length < 2) return null;
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const xy = points.map((v, i) => {
+    const x = (i / (points.length - 1)) * 100;
+    const y = max === min ? 15 : 28 - ((v - min) / (max - min)) * 26;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  return (
+    <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="w-24 h-8 shrink-0">
+      <polyline points={xy.join(" ")} fill="none" strokeWidth="2"
+        stroke={up ? "#16a34a" : "#dc2626"} vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
 function humanError(e: string): string {
   if (e.includes("17841435633230475") || e.toLowerCase().includes("does not exist")) {
     const id = e.split(":")[0].trim();
@@ -90,6 +120,8 @@ export default function SocialDashboard() {
 
   const edgeDate = new Date(Date.now() - period * 864e5).toISOString().slice(0, 10);
   const edgeIso = new Date(Date.now() - period * 864e5).toISOString();
+  const prevEdgeDate = new Date(Date.now() - 2 * period * 864e5).toISOString().slice(0, 10);
+  const prevEdgeIso = new Date(Date.now() - 2 * period * 864e5).toISOString();
 
   const followers = accounts.reduce((s, a) => s + (a.followers || 0), 0);
   const fDelta = useMemo(() => {
@@ -104,8 +136,8 @@ export default function SocialDashboard() {
     return now - then;
   }, [accounts, edgeDate]);
 
-  const sumHist = (field: string) =>
-    accounts.reduce((s, a) => s + (a.history || []).filter((h: any) => h.date >= edgeDate).reduce((x: number, h: any) => x + (h[field] || 0), 0), 0);
+  const sumHist = (field: string, from = edgeDate, to = "9999") =>
+    accounts.reduce((s, a) => s + (a.history || []).filter((h: any) => h.date >= from && h.date < to).reduce((x: number, h: any) => x + (h[field] || 0), 0), 0);
 
   const posts = useMemo(
     () => accounts
@@ -115,9 +147,10 @@ export default function SocialDashboard() {
     [accounts]
   );
   const periodPosts = posts.filter((p) => p.timestamp >= edgeIso);
-  const sumPosts = (f: string) => periodPosts.reduce((s, p) => s + (p[f] || 0), 0);
+  const prevPosts = posts.filter((p) => p.timestamp >= prevEdgeIso && p.timestamp < edgeIso);
+  const sumPosts = (f: string, list = periodPosts) => list.reduce((s, p) => s + (p[f] || 0), 0);
 
-  const tiles = [
+  const tiles: any[] = [
     {
       label: "Подписчики", value: fmt(followers),
       sub: fDelta === 0 ? `без изменений за ${period} дн` : `${fDelta > 0 ? "↑ +" : "↓ "}${fmt(fDelta)} за ${period} дн`,
@@ -126,17 +159,17 @@ export default function SocialDashboard() {
     {
       label: `Просмотры за ${period} дн`,
       value: fmt(sumHist("views")),
-      sub: sumHist("views") === 0 && sumPosts("views") > 0
-        ? "дневная история копится с 19.08 — цифра появится завтра"
-        : "по дневным срезам",
-      subClass: "text-gray-500",
+      delta: { cur: sumHist("views"), prev: sumHist("views", prevEdgeDate, edgeDate) },
+      note: sumHist("views") === 0 && sumPosts("views") > 0 ? "история копится с 19.08" : "",
     },
-    { label: `Постов за ${period} дн`, value: fmt(periodPosts.length),
-      sub: `завод ${periodPosts.filter((p) => p.source === "factory").length} · вручную ${periodPosts.filter((p) => p.source !== "factory").length}`,
-      subClass: "text-gray-500" },
-    { label: `Лайки за ${period} дн`, value: fmt(sumPosts("likes")), sub: "по постам периода", subClass: "text-gray-500" },
-    { label: `Сейвы за ${period} дн`, value: fmt(sumPosts("saved")), sub: "по постам периода", subClass: "text-gray-500" },
-    { label: `Репосты за ${period} дн`, value: fmt(sumPosts("shares")), sub: "по постам периода", subClass: "text-gray-500" },
+    {
+      label: `Постов за ${period} дн`, value: fmt(periodPosts.length),
+      delta: { cur: periodPosts.length, prev: prevPosts.length },
+      note: `завод ${periodPosts.filter((p) => p.source === "factory").length} · вручную ${periodPosts.filter((p) => p.source !== "factory").length}`,
+    },
+    { label: `Лайки за ${period} дн`, value: fmt(sumPosts("likes")), delta: { cur: sumPosts("likes"), prev: sumPosts("likes", prevPosts) } },
+    { label: `Сейвы за ${period} дн`, value: fmt(sumPosts("saved")), delta: { cur: sumPosts("saved"), prev: sumPosts("saved", prevPosts) } },
+    { label: `Репосты за ${period} дн`, value: fmt(sumPosts("shares")), delta: { cur: sumPosts("shares"), prev: sumPosts("shares", prevPosts) } },
   ];
 
   const daily = useMemo(() => {
@@ -227,6 +260,13 @@ export default function SocialDashboard() {
             <div className="text-sm text-gray-500">{t.label}</div>
             <div className="text-2xl font-bold mt-1">{t.value}</div>
             {t.sub && <div className={`text-sm mt-1 ${t.subClass}`}>{t.sub}</div>}
+            {t.delta && (
+              <div className="text-sm mt-1">
+                <Delta cur={t.delta.cur} prev={t.delta.prev} />{" "}
+                <span className="text-gray-400 text-xs">к прошлым {period} дн</span>
+              </div>
+            )}
+            {t.note && <div className="text-xs mt-0.5 text-gray-400">{t.note}</div>}
           </div>
         ))}
       </div>
@@ -281,7 +321,7 @@ export default function SocialDashboard() {
                 {a.platform === "youtube" ? "📺" : a.platform === "tiktok" ? "🎵" : "📸"}
               </div>
             )}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <a href={a.url} target="_blank" className="font-semibold text-brand-700 block truncate" onClick={(e) => e.stopPropagation()}>
                 {a.title}
               </a>
@@ -289,7 +329,27 @@ export default function SocialDashboard() {
                 {PLATFORM_NAMES[a.platform] || a.platform}{a.lang ? ` ${LANG_NAMES[a.lang] || a.lang}` : ""} · {fmt(a.followers)} подп.
                 {a.source === "factory" ? " · 🏭" : ""}
               </div>
+              {(() => {
+                const hist = (a.history || []).filter((h: any) => h.date >= edgeDate && h.followers != null);
+                if (hist.length < 2) return null;
+                const first = hist[0].followers;
+                const last = hist[hist.length - 1].followers;
+                return (
+                  <div className="text-sm mt-0.5">
+                    <Delta cur={last} prev={first} />
+                    <span className="text-gray-400 text-xs"> подписчики за {period} дн</span>
+                  </div>
+                );
+              })()}
             </div>
+            {(() => {
+              const pts = (a.history || [])
+                .filter((h: any) => h.date >= edgeDate)
+                .map((h: any) => h.views ?? h.followers ?? 0);
+              const fh = (a.history || []).filter((h: any) => h.date >= edgeDate && h.followers != null);
+              const up = fh.length >= 2 ? fh[fh.length - 1].followers >= fh[0].followers : true;
+              return <Spark points={pts} up={up} />;
+            })()}
           </div>
         ))}
         {!accounts.length && (
