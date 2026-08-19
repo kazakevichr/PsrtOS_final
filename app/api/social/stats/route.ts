@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { sourceFor } from "@/lib/insta";
+
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +12,16 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session || session.user.role !== "OWNER") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Источник правды о заводских постах — журнал завода: события «опубликован»
+  // несут permalink. Деление по аккаунтам устарело: завод постит и в
+  // super.fit24 (автоплан), а woman получает нарезки.
+  const factoryLinks = new Set<string>();
+  const norm = (u: string) =>
+    (u || "").replace(/^https?:\/\//, "").replace(/^www\./, "").split("?")[0].replace(/\/$/, "");
+  for (const j of await prisma.factoryJob.findMany({ select: { links: true } })) {
+    for (const l of JSON.parse(j.links)) if (l?.link) factoryLinks.add(norm(l.link));
   }
 
   const accounts: any[] = [];
@@ -27,9 +37,11 @@ export async function GET() {
       avatar: p.avatar || null,
       url: `https://instagram.com/${r.username}`,
       followers: p.followers ?? null,
-      source: sourceFor(r.username),
       history: JSON.parse(r.history),
-      media: JSON.parse(r.media),
+      media: JSON.parse(r.media).map((m: any) => ({
+        ...m,
+        source: factoryLinks.has(norm(m.permalink)) ? "factory" : "manual",
+      })),
       updatedAt: r.updatedAt.toISOString(),
     });
   }

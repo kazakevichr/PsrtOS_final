@@ -86,7 +86,7 @@ export default function SocialDashboard() {
 
   const posts = useMemo(
     () => accounts
-      .flatMap((a) => (a.media || []).map((m: any) => ({ ...m, username: a.username, source: a.source, platform: a.platform, lang: a.lang })))
+      .flatMap((a) => (a.media || []).map((m: any) => ({ ...m, username: a.username, source: m.source ?? a.source, platform: a.platform, lang: a.lang })))
       .filter((m) => m.timestamp)
       .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || "")),
     [accounts]
@@ -123,14 +123,16 @@ export default function SocialDashboard() {
   }, [accounts, edgeDate]);
 
   const factoryStatus = useMemo(() => {
-    const factory = accounts.filter((a) => a.source === "factory" && a.platform === "instagram");
-    if (!factory.length) return null;
-    const last = factory.flatMap((a) => a.media || []).map((m: any) => m.timestamp).sort().at(-1);
-    if (!last) return { text: "постов ещё нет", ok: false };
+    if (platform !== "all" && platform !== "instagram") return null;
+    if (brand !== "all" && brand !== "superfit") return null;
+    const last = posts
+      .filter((p) => p.platform === "instagram" && p.source === "factory")
+      .map((p) => p.timestamp).sort().at(-1);
+    if (!last) return { text: "заводских постов ещё нет", ok: false };
     const hours = Math.round((Date.now() - +new Date(last)) / 36e5);
     const when = hours < 1 ? "меньше часа назад" : hours < 24 ? `${hours} ч назад` : `${Math.round(hours / 24)} дн назад`;
     return { text: `последний пост ${when}`, ok: hours <= 36 };
-  }, [accounts]);
+  }, [posts, platform, brand]);
 
   const maxViews = Math.max(1, ...posts.slice(0, 120).map((p) => p.views || 0));
   const byDay: [string, any[]][] = useMemo(() => {
@@ -248,8 +250,8 @@ export default function SocialDashboard() {
                 {a.title}
               </a>
               <div className="text-sm text-gray-500 truncate">
-                {PLATFORM_NAMES[a.platform] || a.platform}{a.lang ? ` ${LANG_NAMES[a.lang] || a.lang}` : ""} · {fmt(a.followers)} подп. ·{" "}
-                {a.source === "factory" ? "🏭" : "✋"}
+                {PLATFORM_NAMES[a.platform] || a.platform}{a.lang ? ` ${LANG_NAMES[a.lang] || a.lang}` : ""} · {fmt(a.followers)} подп.
+                {a.source === "factory" ? " · 🏭" : ""}
               </div>
             </div>
           </div>
