@@ -7,3 +7,4 @@ dev.db-journal
 tsconfig.tsbuildinfo
 .DS_Store
 npm-debug.log*
+.idea/
