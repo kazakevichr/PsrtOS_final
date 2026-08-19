@@ -198,3 +198,33 @@ model OracleChannel {
 
   @@unique([platform, key])
 }
+
+// ── Контент-завод: план тем и журнал производства ──────────────────────────
+// Контракт с заводом (content_converter/auto/planhub.py): GET /api/factory/plan
+// отдаёт тему дня по слоту, POST /api/factory/log принимает события заказа.
+model PlanSlot {
+  id    String @id @default(cuid())
+  date  String // YYYY-MM-DD
+  slot  String // make | carousel | trainer:male | trainer:female | avatar
+  topic String @default("")
+  facts String @default("")
+
+  @@unique([date, slot])
+}
+
+model FactoryJob {
+  jobId     String   @id
+  date      String   @default("")
+  slot      String   @default("")
+  kind      String   @default("")
+  character String   @default("")
+  topic     String   @default("")
+  script    String   @default("")
+  event     String   @default("") // создан | готов | опубликован | не принят | ошибка
+  links     String   @default("[]")
+  error     String   @default("")
+  onDemand  Boolean  @default(false)
+  cost      Float    @default(0) // задел: завод начнёт слать стоимость — ляжет сюда
+  at        DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

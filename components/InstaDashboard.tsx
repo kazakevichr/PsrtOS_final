@@ -13,6 +13,16 @@ const BRAND_NAMES: Record<string, string> = {
 const fmt = (n: any) =>
   n == null ? "—" : Number(n).toLocaleString("ru-RU");
 
+// Сырые ошибки Graph API переводим на человеческий: владельцу важно «что
+// делать», а не трейс. Известен пока один случай — отвязанный аккаунт.
+function humanError(e: string): string {
+  if (e.includes("17841435633230475") || e.toLowerCase().includes("does not exist")) {
+    const id = e.split(":")[0].trim();
+    return `${id === "17841435633230475" ? "superfit24_training" : id}: аккаунт отвязан от Business Manager — добавь его в портфолио заново и назначь системному пользователю HQ Bot`;
+  }
+  return e;
+}
+
 function sumLast(accounts: any[], field: string, days = 7) {
   const edge = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
   let sum = 0;
@@ -44,6 +54,7 @@ export default function InstaDashboard() {
   const [data, setData] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [period, setPeriod] = useState(7);
 
   async function loadBrands() {
     const r = await fetch("/api/insta/stats");
@@ -75,7 +86,7 @@ export default function InstaDashboard() {
       const s = await r.json();
       setNote(
         s.errors?.length
-          ? `Собрано аккаунтов: ${s.accounts}. Ошибки: ${s.errors.join("; ")}`
+          ? `Собрано аккаунтов: ${s.accounts}. ⚠️ ${s.errors.map(humanError).join("; ")}`
           : `Собрано аккаунтов: ${s.accounts}.`
       );
       if (brand) await loadBrand(brand);
@@ -87,7 +98,22 @@ export default function InstaDashboard() {
   }
 
   const accounts = data?.accounts || [];
-  const f = useMemo(() => followersDelta(accounts), [accounts]);
+  const f = useMemo(() => followersDelta(accounts, period), [accounts, period]);
+  // Дневная динамика: суммируем дневные срезы всех аккаунтов бренда
+  const daily = useMemo(() => {
+    const byDate: Record<string, { views: number; reach: number }> = {};
+    const edge = new Date(Date.now() - period * 864e5).toISOString().slice(0, 10);
+    for (const a of accounts) {
+      for (const h of a.history || []) {
+        if (h.date < edge) continue;
+        const d = (byDate[h.date] ||= { views: 0, reach: 0 });
+        d.views += h.views || 0;
+        d.reach += h.reach || 0;
+      }
+    }
+    return Object.entries(byDate).sort(([a], [b]) => a.localeCompare(b));
+  }, [accounts, period]);
+
   const updatedAt = accounts.length
     ? new Date(
         Math.max(...accounts.map((a: any) => +new Date(a.updatedAt)))
@@ -113,7 +139,7 @@ export default function InstaDashboard() {
 
   // Публикации за 7 дней с разбивкой по источнику + сумма сейвов и репостов
   const week = useMemo(() => {
-    const edge = new Date(Date.now() - 7 * 864e5).toISOString();
+    const edge = new Date(Date.now() - period * 864e5).toISOString();
     const posts = accounts
       .flatMap((a: any) => (a.media || []).map((m: any) => ({ ...m, source: a.source })))
       .filter((m: any) => (m.timestamp || "") >= edge);
@@ -125,7 +151,7 @@ export default function InstaDashboard() {
       saved: sum("saved"),
       shares: sum("shares"),
     };
-  }, [accounts]);
+  }, [accounts, period]);
 
   // Статус контент-завода: когда был последний заводской пост
   const factoryStatus = useMemo(() => {
@@ -145,19 +171,19 @@ export default function InstaDashboard() {
     {
       label: "Подписчики",
       value: fmt(f.now),
-      sub: f.delta === 0 ? "без изменений за 7 дней" : `${f.delta > 0 ? "↑ +" : "↓ "}${fmt(f.delta)} за 7 дней`,
+      sub: f.delta === 0 ? `без изменений за ${period} дней` : `${f.delta > 0 ? "↑ +" : "↓ "}${fmt(f.delta)} за ${period} дней`,
       subClass: f.delta > 0 ? "text-green-600" : f.delta < 0 ? "text-red-600" : "text-gray-500",
     },
-    { label: "Просмотры за 7 дней", value: fmt(sumLast(accounts, "views")), sub: "", subClass: "" },
-    { label: "Охват за 7 дней", value: fmt(sumLast(accounts, "reach")), sub: "", subClass: "" },
+    { label: `Просмотры за ${period} дней`, value: fmt(sumLast(accounts, "views", period)), sub: "", subClass: "" },
+    { label: `Охват за ${period} дней`, value: fmt(sumLast(accounts, "reach", period)), sub: "", subClass: "" },
     {
-      label: "Постов за 7 дней",
+      label: `Постов за ${period} дней`,
       value: fmt(week.posts),
       sub: `завод ${week.factory} · вручную ${week.manual}`,
       subClass: "text-gray-500",
     },
-    { label: "Сейвы за 7 дней", value: fmt(week.saved), sub: "по постам недели", subClass: "text-gray-500" },
-    { label: "Репосты за 7 дней", value: fmt(week.shares), sub: "по постам недели", subClass: "text-gray-500" },
+    { label: `Сейвы за ${period} дней`, value: fmt(week.saved), sub: "по постам периода", subClass: "text-gray-500" },
+    { label: `Репосты за ${period} дней`, value: fmt(week.shares), sub: "по постам периода", subClass: "text-gray-500" },
   ];
 
   return (
@@ -173,7 +199,18 @@ export default function InstaDashboard() {
       </div>
       {note && <p className="text-sm text-gray-500">{note}</p>}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex gap-1 mr-2 bg-white border rounded-lg p-0.5">
+          {[7, 14, 30, 90].map((d) => (
+            <button
+              key={d}
+              onClick={() => setPeriod(d)}
+              className={`px-2.5 py-1 rounded-md text-sm ${d === period ? "bg-brand-600 text-white" : "hover:bg-gray-50"}`}
+            >
+              {d} дн
+            </button>
+          ))}
+        </div>
         {brands.map((b) => (
           <button
             key={b}
@@ -196,6 +233,32 @@ export default function InstaDashboard() {
           </div>
         ))}
       </div>
+
+      {daily.length > 1 && (
+        <div className="card">
+          <h2 className="font-semibold mb-1">Динамика по дням</h2>
+          <p className="text-xs text-gray-400 mb-3">синее — просмотры, зелёное — охват</p>
+          <div className="flex items-end gap-1 h-32">
+            {daily.map(([date, d]) => {
+              const max = Math.max(1, ...daily.map(([, x]) => x.views));
+              return (
+                <div key={date} className="flex-1 flex flex-col justify-end items-center gap-0.5 group relative min-w-0">
+                  <div className="hidden group-hover:block absolute -top-10 bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+                    {new Date(date + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}:{" "}
+                    {fmt(d.views)} просм · {fmt(d.reach)} охват
+                  </div>
+                  <div className="w-full bg-brand-600 rounded-t" style={{ height: `${Math.max(2, (d.views / max) * 100)}%` }} />
+                  <div className="w-full bg-green-500 rounded-t" style={{ height: `${Math.max(1, (d.reach / max) * 100 * 0.6)}%` }} />
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-between text-xs text-gray-400 mt-1">
+            <span>{daily[0] && new Date(daily[0][0] + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</span>
+            <span>{daily.at(-1) && new Date(daily.at(-1)![0] + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}</span>
+          </div>
+        </div>
+      )}
 
       {accounts.some((a: any) => a.source === "factory") && (
         <div

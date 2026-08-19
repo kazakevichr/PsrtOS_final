@@ -13,5 +13,6 @@ export const config = {
     "/settings/:path*",
     "/insta/:path*",
     "/oracle/:path*",
+    "/factory/:path*",
   ],
 };

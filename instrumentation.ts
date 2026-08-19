@@ -19,10 +19,15 @@ export async function register() {
       console.error("[insta] плановый сбор упал:", e);
     }
     try {
-      const { runOracleCollect } = await import("./lib/oracle");
-      const s = await runOracleCollect();
+      // Через HTTP к самому себе, не импортом: lib/oracle читает файлы токенов
+      // (node:fs), а instrumentation собирается и для edge — там fs нет.
+      const r = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/oracle/collect`, {
+        method: "POST",
+        headers: { "x-factory-key": process.env.IG_HOST_KEY || "" },
+      });
+      const s = await r.json();
       console.log(`[oracle] плановый сбор: каналов ${s.channels}` +
-        (s.errors.length ? `, ошибки: ${s.errors.join("; ")}` : ""));
+        (s.errors?.length ? `, ошибки: ${s.errors.join("; ")}` : ""));
     } catch (e) {
       console.error("[oracle] плановый сбор упал:", e);
     }
