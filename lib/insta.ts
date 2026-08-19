@@ -17,6 +17,18 @@ export function brandNames(): string[] {
   return [...Object.keys(brandMap()), "other"];
 }
 
+// Какие аккаунты наполняет контент-завод (остальные считаются ручными).
+// Разделение по аккаунтам точное: woman и training целиком заводские,
+// super.fit24 — только ручные публикации из бота.
+function factoryAccounts(): string[] {
+  return (process.env.IG_FACTORY_ACCOUNTS || "superfit24_woman,superfit24_training")
+    .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+export function sourceFor(username: string): "factory" | "manual" {
+  return factoryAccounts().includes((username || "").toLowerCase()) ? "factory" : "manual";
+}
+
 function brandFor(username: string): string {
   const u = (username || "").toLowerCase();
   for (const [brand, users] of Object.entries(brandMap())) {
@@ -149,7 +161,7 @@ async function mediaWithInsights(igId: string, token: string, limit = 25) {
   }
   return items.map((m) => ({
     id: m.id,
-    caption: (m.caption || "").slice(0, 140),
+    caption: (m.caption || "").slice(0, 500),
     type: m.media_product_type || m.media_type,
     timestamp: m.timestamp,
     permalink: m.permalink,
@@ -227,6 +239,7 @@ export async function statsForBrand(brand: string) {
     brand,
     accounts: rows.map((r) => ({
       profile: JSON.parse(r.profile),
+      source: sourceFor(r.username),
       history: JSON.parse(r.history),
       media: JSON.parse(r.media),
       updatedAt: r.updatedAt.toISOString(),

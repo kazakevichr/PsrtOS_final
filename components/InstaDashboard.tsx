@@ -49,7 +49,10 @@ export default function InstaDashboard() {
     const r = await fetch("/api/insta/stats");
     const j = await r.json();
     setBrands(j.brands || []);
-    if (!brand && j.brands?.length) setBrand(j.brands[0]);
+    // Фокус работы — СуперФит: открываем его, а не первый бренд по алфавиту
+    if (!brand && j.brands?.length) {
+      setBrand(j.brands.includes("superfit") ? "superfit" : j.brands[0]);
+    }
   }
 
   async function loadBrand(b: string) {
@@ -94,7 +97,7 @@ export default function InstaDashboard() {
   // Лента: все посты бренда одним списком, свежие сверху, сгруппированы по дням
   const feed = useMemo(() => {
     const posts = accounts.flatMap((a: any) =>
-      (a.media || []).map((m: any) => ({ ...m, username: a.profile?.username }))
+      (a.media || []).map((m: any) => ({ ...m, username: a.profile?.username, source: a.source }))
     );
     posts.sort((a: any, b: any) =>
       (b.timestamp || "").localeCompare(a.timestamp || "")
@@ -108,6 +111,36 @@ export default function InstaDashboard() {
     return Object.entries(byDay);
   }, [accounts]);
 
+  // Публикации за 7 дней с разбивкой по источнику + сумма сейвов и репостов
+  const week = useMemo(() => {
+    const edge = new Date(Date.now() - 7 * 864e5).toISOString();
+    const posts = accounts
+      .flatMap((a: any) => (a.media || []).map((m: any) => ({ ...m, source: a.source })))
+      .filter((m: any) => (m.timestamp || "") >= edge);
+    const sum = (f: string) => posts.reduce((s: number, m: any) => s + (m[f] || 0), 0);
+    return {
+      posts: posts.length,
+      factory: posts.filter((m: any) => m.source === "factory").length,
+      manual: posts.filter((m: any) => m.source === "manual").length,
+      saved: sum("saved"),
+      shares: sum("shares"),
+    };
+  }, [accounts]);
+
+  // Статус контент-завода: когда был последний заводской пост
+  const factoryStatus = useMemo(() => {
+    const last = accounts
+      .filter((a: any) => a.source === "factory")
+      .flatMap((a: any) => a.media || [])
+      .map((m: any) => m.timestamp)
+      .sort()
+      .at(-1);
+    if (!last) return { text: "постов ещё нет", ok: false };
+    const hours = Math.round((Date.now() - +new Date(last)) / 36e5);
+    const when = hours < 1 ? "меньше часа назад" : hours < 24 ? `${hours} ч назад` : `${Math.round(hours / 24)} дн назад`;
+    return { text: `последний пост ${when}`, ok: hours <= 36 };
+  }, [accounts]);
+
   const tiles = [
     {
       label: "Подписчики",
@@ -119,14 +152,12 @@ export default function InstaDashboard() {
     { label: "Охват за 7 дней", value: fmt(sumLast(accounts, "reach")), sub: "", subClass: "" },
     {
       label: "Постов за 7 дней",
-      value: fmt(
-        accounts.flatMap((a: any) => a.media || []).filter((m: any) =>
-          (m.timestamp || "") >= new Date(Date.now() - 7 * 864e5).toISOString()
-        ).length
-      ),
-      sub: "",
-      subClass: "",
+      value: fmt(week.posts),
+      sub: `завод ${week.factory} · вручную ${week.manual}`,
+      subClass: "text-gray-500",
     },
+    { label: "Сейвы за 7 дней", value: fmt(week.saved), sub: "по постам недели", subClass: "text-gray-500" },
+    { label: "Репосты за 7 дней", value: fmt(week.shares), sub: "по постам недели", subClass: "text-gray-500" },
   ];
 
   return (
@@ -156,7 +187,7 @@ export default function InstaDashboard() {
         ))}
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {tiles.map((t) => (
           <div key={t.label} className="card">
             <div className="text-sm text-gray-500">{t.label}</div>
@@ -165,6 +196,23 @@ export default function InstaDashboard() {
           </div>
         ))}
       </div>
+
+      {accounts.some((a: any) => a.source === "factory") && (
+        <div
+          className={`card flex items-center gap-3 text-sm ${
+            factoryStatus.ok ? "" : "border-yellow-400 bg-yellow-50"
+          }`}
+        >
+          <span className="text-lg">🏭</span>
+          <div>
+            <span className="font-semibold">Контент-завод: </span>
+            {factoryStatus.text}
+            {", за 7 дней — "}{week.factory}{" "}
+            {week.factory === 1 ? "пост" : week.factory < 5 ? "поста" : "постов"}
+            {!factoryStatus.ok && " — похоже, завод молчит, стоит проверить"}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {accounts.map((a: any) => (
@@ -183,7 +231,10 @@ export default function InstaDashboard() {
               >
                 @{a.profile?.username}
               </a>
-              <div className="text-sm text-gray-500">{fmt(a.profile?.followers)} подписчиков</div>
+              <div className="text-sm text-gray-500">
+                {fmt(a.profile?.followers)} подписчиков ·{" "}
+                {a.source === "factory" ? "🏭 завод" : "✋ вручную"}
+              </div>
             </div>
           </div>
         ))}
@@ -208,28 +259,41 @@ export default function InstaDashboard() {
                 </div>
                 <div className="space-y-2">
                   {posts.map((p: any) => (
-                    <div
+                    <a
                       key={p.id}
-                      className="grid grid-cols-[100px_1fr_200px] gap-3 items-center text-sm"
-                      title={`views ${fmt(p.views)} · reach ${fmt(p.reach)} · likes ${fmt(p.likes)} · comments ${fmt(p.comments)} · shares ${fmt(p.shares)} · saved ${fmt(p.saved)}`}
+                      href={p.permalink}
+                      target="_blank"
+                      className="grid grid-cols-[56px_1fr] sm:grid-cols-[56px_1fr_auto] gap-3 items-start rounded-lg border border-transparent hover:border-gray-200 hover:bg-gray-50 p-2 -m-2 transition-colors"
                     >
-                      <div className="text-gray-500 truncate">@{p.username}</div>
+                      {/* Превью: обложка поста; протухший CDN-урл просто скрываем */}
+                      {p.thumbnail ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={p.thumbnail}
+                          alt=""
+                          loading="lazy"
+                          className="w-14 h-20 object-cover rounded-md bg-gray-100"
+                          onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")}
+                        />
+                      ) : (
+                        <div className="w-14 h-20 rounded-md bg-gray-100 flex items-center justify-center text-gray-300 text-xl">▶</div>
+                      )}
                       <div className="min-w-0">
-                        <a href={p.permalink} target="_blank" className="hover:text-brand-700 block truncate">
-                          {p.caption || "(без подписи)"}
-                        </a>
-                        <div className="h-1.5 bg-gray-100 rounded mt-1">
-                          <div
-                            className="h-1.5 bg-brand-600 rounded"
-                            style={{ width: `${p.barW}%` }}
-                          />
+                        <div className="text-xs text-gray-400 mb-0.5">
+                          @{p.username}
+                          <span className="ml-2">{p.source === "factory" ? "🏭 завод" : "✋ вручную"}</span>
+                          <span className="badge-green ml-2">{p.type}</span>
+                        </div>
+                        <div className="text-sm line-clamp-2">{p.caption || "(без подписи)"}</div>
+                        <div className="h-1.5 bg-gray-100 rounded mt-1.5 max-w-xl">
+                          <div className="h-1.5 bg-brand-600 rounded" style={{ width: `${p.barW}%` }} />
                         </div>
                       </div>
-                      <div className="text-gray-500 text-right whitespace-nowrap">
-                        <span className="badge-green mr-1">{p.type}</span>
-                        {fmt(p.views)} · ♥ {fmt(p.likes)} · 💬 {fmt(p.comments)}
+                      <div className="text-sm text-gray-500 sm:text-right whitespace-nowrap leading-6 col-start-2 sm:col-start-3">
+                        <div><b className="text-gray-900">{fmt(p.views)}</b> просмотров · охват {fmt(p.reach)}</div>
+                        <div>♥ {fmt(p.likes)} · 💬 {fmt(p.comments)} · 🔖 {fmt(p.saved)} · ↗ {fmt(p.shares)}</div>
                       </div>
-                    </div>
+                    </a>
                   ))}
                 </div>
               </div>
