@@ -40,5 +40,21 @@ export async function POST(req: Request) {
     create: { jobId: b.job_id, ...fields },
     update: fields,
   });
+
+  // Факт задним числом: опубликованный заказ вписывает свою тему в пустую
+  // клетку плана. Для avatar это единственный способ попасть в план (он не
+  // планируется вперёд), для остальных слотов факт полезнее пустоты.
+  if (fields.event === "опубликован" && fields.date && fields.slot && fields.topic) {
+    const cell = await prisma.planSlot.findUnique({
+      where: { date_slot: { date: fields.date, slot: fields.slot } },
+    });
+    if (!cell || !cell.topic.trim()) {
+      await prisma.planSlot.upsert({
+        where: { date_slot: { date: fields.date, slot: fields.slot } },
+        create: { date: fields.date, slot: fields.slot, topic: fields.topic, facts: "" },
+        update: { topic: fields.topic },
+      });
+    }
+  }
   return NextResponse.json({ ok: true });
 }
