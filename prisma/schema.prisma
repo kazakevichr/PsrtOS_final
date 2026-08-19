@@ -161,3 +161,26 @@ model PayrollRecord {
 
   @@unique([userId, month])
 }
+
+// ── Инста-аналитика (перенос из insta-hq/Netlify) ───────────────────────────
+// Один аккаунт Instagram = одна строка. history и media — JSON-строки:
+// SQLite не умеет Json-тип, а история нужна целиком и всегда читается разом.
+model IgAccount {
+  igId      String   @id
+  username  String
+  brand     String
+  profile   String   @default("{}")
+  history   String   @default("[]")
+  media     String   @default("[]")
+  updatedAt DateTime @updatedAt
+}
+
+// Временный публичный хостинг картинок для публикации каруселей:
+// Graph API принимает изображения только по публичному URL. Instagram
+// забирает копию себе, наша живёт три дня и подчищается при загрузках.
+model HostedImage {
+  id        String   @id
+  mime      String   @default("image/png")
+  data      Bytes
+  createdAt DateTime @default(now())
+}

@@ -11,5 +11,6 @@ export const config = {
     "/payroll/:path*",
     "/lost/:path*",
     "/settings/:path*",
+    "/insta/:path*",
   ],
 };
