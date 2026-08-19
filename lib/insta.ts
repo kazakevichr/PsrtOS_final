@@ -188,6 +188,7 @@ export async function runCollect() {
     summary.errors.push("META_TOKEN не задан");
     return summary;
   }
+  await pruneRemoved();
 
   let accounts: any[] = [];
   try {
@@ -228,6 +229,15 @@ export async function runCollect() {
     }
   }
   return summary;
+}
+
+// Убранные из META_IG_IDS аккаунты вычищаем из базы (личный @kazakevich и
+// прочие «наблюдать не нужно»): без этого они навсегда остаются в «Прочее»
+// со старыми цифрами.
+export async function pruneRemoved() {
+  const ids = (process.env.META_IG_IDS || "").split(",").map((s) => s.trim()).filter(Boolean);
+  if (!ids.length) return;
+  await prisma.igAccount.deleteMany({ where: { igId: { notIn: ids } } });
 }
 
 export async function statsForBrand(brand: string) {

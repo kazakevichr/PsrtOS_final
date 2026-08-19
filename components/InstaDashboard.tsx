@@ -5,8 +5,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 const BRAND_NAMES: Record<string, string> = {
-  oracle: "Оракл",
   superfit: "СуперФит",
+  party: "Вечеринки",
   other: "Прочее",
 };
 
