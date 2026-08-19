@@ -34,6 +34,8 @@ export default function SocialDashboard() {
   const [all, setAll] = useState<any[]>([]);
   const [period, setPeriod] = useState(7);
   const [platform, setPlatform] = useState("all");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
   const [brand, setBrand] = useState("all");
   const [profile, setProfile] = useState("all");
 
@@ -47,6 +49,27 @@ export default function SocialDashboard() {
     const t = setInterval(load, 5 * 60 * 1000); // подтягиваем свежие срезы фоном
     return () => clearInterval(t);
   }, []);
+
+  // Ручной сбор поверх автоматического: авто идёт раз в 20 минут, кнопка —
+  // когда нужно оперативно (после публикации, перед созвоном).
+  async function collectNow() {
+    setBusy(true);
+    setNote("Собираю: Инстаграм + Ютуб/ТикТок…");
+    try {
+      const [ig, or_] = await Promise.all([
+        fetch("/api/insta/collect", { method: "POST" }).then((r) => r.json()).catch((e) => ({ errors: [String(e)] })),
+        fetch("/api/oracle/collect", { method: "POST" }).then((r) => r.json()).catch((e) => ({ errors: [String(e)] })),
+      ]);
+      const errors = [...(ig.errors || []), ...(or_.errors || [])].map(humanError);
+      setNote(
+        `Собрано: Инстаграм ${ig.accounts ?? 0} акк., Оракл ${or_.channels ?? 0} канал.` +
+        (errors.length ? ` ⚠️ ${errors.join("; ")}` : "")
+      );
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   // Оси фильтров строятся от данных: появится новая платформа — появится чип
   const platforms = useMemo(() => [...new Set(all.map((a) => a.platform))], [all]);
@@ -157,12 +180,18 @@ export default function SocialDashboard() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold mb-1">Соц.Сети</h1>
-        <p className="text-sm text-gray-500">
-          Все платформы и проекты · обновлено {updatedAt} · данные обновляются сами каждые 20 минут
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold mb-1">Соц.Сети</h1>
+          <p className="text-sm text-gray-500">
+            Все платформы и проекты · обновлено {updatedAt} · авто-сбор каждые 20 минут
+          </p>
+        </div>
+        <button className="btn btn-primary" onClick={collectNow} disabled={busy}>
+          {busy ? "Собираю…" : "🔄 Обновить статистику"}
+        </button>
       </div>
+      {note && <p className="text-sm text-gray-500">{note}</p>}
 
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex gap-1 bg-white border rounded-lg p-0.5">
