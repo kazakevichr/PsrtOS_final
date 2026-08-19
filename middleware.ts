@@ -12,5 +12,6 @@ export const config = {
     "/lost/:path*",
     "/settings/:path*",
     "/insta/:path*",
+    "/oracle/:path*",
   ],
 };

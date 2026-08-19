@@ -50,6 +50,7 @@ export default async function Navbar() {
         lostLink,
         tasksLink,
         navLink("/insta", "Инстаграм"),
+        navLink("/oracle", "Оракл"),
         navLink("/settings/projects", "Настройки"),
       ]
     : [payrollLink, partnersLink, kanbanDropdown, projectsLink, lostLink, tasksLink];

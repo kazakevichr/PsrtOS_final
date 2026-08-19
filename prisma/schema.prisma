@@ -184,3 +184,17 @@ model HostedImage {
   data      Bytes
   createdAt DateTime @default(now())
 }
+
+// ── Аналитика Оракла: YouTube-каналы (свои OAuth-токены завода) и TikTok
+// (через upload-post Analytics). Паттерн тот же, что у IgAccount.
+model OracleChannel {
+  id        String   @id @default(cuid())
+  platform  String // yt | tiktok
+  key       String // язык канала (ru/en/...) или профиль upload-post
+  profile   String   @default("{}")
+  history   String   @default("[]")
+  media     String   @default("[]")
+  updatedAt DateTime @updatedAt
+
+  @@unique([platform, key])
+}

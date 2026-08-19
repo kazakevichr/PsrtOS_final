@@ -18,6 +18,14 @@ export async function register() {
     } catch (e) {
       console.error("[insta] плановый сбор упал:", e);
     }
+    try {
+      const { runOracleCollect } = await import("./lib/oracle");
+      const s = await runOracleCollect();
+      console.log(`[oracle] плановый сбор: каналов ${s.channels}` +
+        (s.errors.length ? `, ошибки: ${s.errors.join("; ")}` : ""));
+    } catch (e) {
+      console.error("[oracle] плановый сбор упал:", e);
+    }
   };
 
   setInterval(tick, 15 * 60 * 1000);
