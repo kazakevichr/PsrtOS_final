@@ -11,6 +11,7 @@ const EVENT_BADGE: Record<string, string> = {
   "готов": "bg-blue-100 text-blue-800",
   "создан": "bg-gray-100 text-gray-600",
   "не принят": "bg-yellow-100 text-yellow-800",
+  "брак": "bg-red-100 text-red-800",
   "ошибка": "bg-red-100 text-red-800",
 };
 
@@ -84,9 +85,10 @@ export default function FactoryDashboard() {
       const s = (byKind[k] ||= { kind: k, total: 0, published: 0, rejected: 0, failed: 0, cost: 0 });
       s.total++;
       if (j.event === "опубликован") s.published++;
-      if (j.event === "не принят") s.rejected++;
+      if (j.event === "не принят" || j.event === "брак") s.rejected++;
       if (j.event === "ошибка") s.failed++;
       s.cost += j.cost || 0;
+      if (j.seconds) { s.secSum = (s.secSum || 0) + j.seconds; s.secN = (s.secN || 0) + 1; }
     }
     return Object.values(byKind);
   }, [jobs]);
@@ -169,7 +171,7 @@ export default function FactoryDashboard() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="card"><div className="text-sm text-gray-500">Заказов за 60 дней</div><div className="text-2xl font-bold mt-1">{fmt(jobs.length)}</div></div>
             <div className="card"><div className="text-sm text-gray-500">Опубликовано</div><div className="text-2xl font-bold mt-1">{fmt(jobs.filter((j) => j.event === "опубликован").length)}</div></div>
-            <div className="card"><div className="text-sm text-gray-500">Брак (не принят + ошибка)</div><div className="text-2xl font-bold mt-1">{fmt(jobs.filter((j) => j.event === "не принят" || j.event === "ошибка").length)}</div></div>
+            <div className="card"><div className="text-sm text-gray-500">Брак (не принят + ошибка)</div><div className="text-2xl font-bold mt-1">{fmt(jobs.filter((j) => ["не принят", "брак", "ошибка"].includes(j.event)).length)}</div></div>
             <div className="card"><div className="text-sm text-gray-500">Смета за 60 дней</div><div className="text-2xl font-bold mt-1">{totalCost ? `$${totalCost.toFixed(2)}` : "—"}</div>
               {!totalCost && <div className="text-xs text-gray-400 mt-1">завод пока не сообщает стоимость</div>}</div>
           </div>
@@ -181,7 +183,7 @@ export default function FactoryDashboard() {
                 <thead><tr className="text-left text-gray-500">
                   <th className="py-1 pr-4">Тип</th><th className="py-1 pr-4">Всего</th>
                   <th className="py-1 pr-4">Опубликовано</th><th className="py-1 pr-4">Не принято</th>
-                  <th className="py-1 pr-4">Ошибки</th><th className="py-1">Стоимость</th>
+                  <th className="py-1 pr-4">Ошибки</th><th className="py-1 pr-4">Ср. время</th><th className="py-1">Стоимость</th>
                 </tr></thead>
                 <tbody>
                   {stats.map((s: any) => (
@@ -191,6 +193,7 @@ export default function FactoryDashboard() {
                       <td className="py-1.5 pr-4 text-green-700">{s.published}</td>
                       <td className="py-1.5 pr-4 text-yellow-700">{s.rejected}</td>
                       <td className="py-1.5 pr-4 text-red-700">{s.failed}</td>
+                      <td className="py-1.5 pr-4">{s.secN ? `${Math.round(s.secSum / s.secN / 60)} мин` : "—"}</td>
                       <td className="py-1.5">{s.cost ? `$${s.cost.toFixed(2)}` : "—"}</td>
                     </tr>
                   ))}
@@ -208,7 +211,10 @@ export default function FactoryDashboard() {
                   <summary className="flex flex-wrap items-center gap-2 cursor-pointer text-sm">
                     <span className={`px-2 py-0.5 rounded text-xs ${EVENT_BADGE[j.event] || "bg-gray-100 text-gray-600"}`}>{j.event || "?"}</span>
                     <span className="text-gray-400 text-xs">{new Date(j.at).toLocaleString("ru-RU")}</span>
-                    <span className="text-gray-500 text-xs">{j.kind || j.slot}{j.character ? ` · ${j.character}` : ""}{j.onDemand ? " · по запросу" : ""}</span>
+                    <span className="text-gray-500 text-xs">
+                      {j.kind || j.slot}{j.character ? ` · ${j.character}` : ""}{j.onDemand ? " · по запросу" : ""}
+                      {j.seconds ? ` · ⏱ ${Math.round(j.seconds / 60)} мин` : ""}{j.cost ? ` · $${j.cost.toFixed(2)}` : ""}
+                    </span>
                     <span className="font-medium truncate max-w-md">{j.topic || "(без темы)"}</span>
                     {(j.links || []).map((l: any, i: number) => (
                       <a key={i} href={l.link} target="_blank" className="text-brand-700 text-xs hover:underline" onClick={(e) => e.stopPropagation()}>

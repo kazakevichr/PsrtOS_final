@@ -224,7 +224,8 @@ model FactoryJob {
   links     String   @default("[]")
   error     String   @default("")
   onDemand  Boolean  @default(false)
-  cost      Float    @default(0) // задел: завод начнёт слать стоимость — ляжет сюда
+  cost      Float    @default(0) // смета заказа в долларах (событие «готов»)
+  seconds   Int      @default(0) // длительность производства (событие «готов»)
   at        DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

@@ -32,6 +32,7 @@ export async function POST(req: Request) {
     error: b.error ?? row?.error ?? "",
     onDemand: Boolean(b.on_demand ?? row?.onDemand ?? false),
     cost: Number(b.cost ?? row?.cost ?? 0) || 0,
+    seconds: Math.round(Number(b.seconds ?? row?.seconds ?? 0)) || 0,
     at: b.at ? new Date(b.at) : row?.at ?? new Date(),
   };
   await prisma.factoryJob.upsert({
