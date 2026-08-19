@@ -229,3 +229,15 @@ model FactoryJob {
   at        DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// Брак, поставленный из Postos постфактум (кнопка в журнале). Отдельная
+// таблица с монотонным id — завод забирает новые пометки курсором
+// GET /api/factory/defects?after=<id>. Брак из бота сюда НЕ пишется
+// (он приходит событием через /api/factory/log), иначе завод получит
+// свои же пометки обратно.
+model FactoryDefect {
+  id      Int      @id @default(autoincrement())
+  jobId   String
+  comment String   @default("")
+  at      DateTime @default(now())
+}

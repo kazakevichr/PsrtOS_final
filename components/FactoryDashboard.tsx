@@ -59,6 +59,19 @@ export default function FactoryDashboard() {
     await loadPlan(month);
   }
 
+  // Брак постфактум: пост уже вышел, Роман удалил его в Instagram руками и
+  // помечает здесь — комментарий уедет заводу и подмешается в следующие выпуски.
+  async function markDefect(jobId: string) {
+    const comment = window.prompt("Что не так с этим выпуском? Комментарий уйдёт заводу:");
+    if (comment == null) return;
+    await fetch("/api/factory/defect", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ job_id: jobId, comment }),
+    });
+    await loadJobs();
+  }
+
   async function generate() {
     setBusy(true);
     setNote("Генерирую темы на месяц…");
@@ -224,6 +237,14 @@ export default function FactoryDashboard() {
                   </summary>
                   {j.script && <p className="text-xs text-gray-600 mt-2 whitespace-pre-wrap">{j.script}</p>}
                   {j.error && <p className="text-xs text-red-600 mt-1">{j.error}</p>}
+                  {["опубликован", "готов"].includes(j.event) && (
+                    <button
+                      className="mt-2 text-xs border border-red-300 text-red-700 rounded-md px-2 py-1 hover:bg-red-50"
+                      onClick={(e) => { e.preventDefault(); markDefect(j.jobId); }}
+                    >
+                      🗑 Брак
+                    </button>
+                  )}
                 </details>
               ))}
             </div>
