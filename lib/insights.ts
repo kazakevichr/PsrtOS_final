@@ -3,7 +3,7 @@
 // Ключ — тот же ANTHROPIC_API_KEY, что у завода; ANTHROPIC_BASE_URL
 // (опционально) направляет запросы через свой роутер.
 import Anthropic from "@anthropic-ai/sdk";
-import { z } from "zod";
+import { z } from "zod/v4";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { prisma } from "@/lib/prisma";
 
