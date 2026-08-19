@@ -68,6 +68,9 @@ export default function SocialDashboard() {
   const [note, setNote] = useState("");
   const [brand, setBrand] = useState("all");
   const [profile, setProfile] = useState("all");
+  const [insight, setInsight] = useState<any>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiNote, setAiNote] = useState("");
 
   async function load() {
     const r = await fetch("/api/social/stats");
@@ -204,6 +207,55 @@ export default function SocialDashboard() {
     return Object.entries(m);
   }, [posts]);
 
+  const scope = `${platform}|${brand}|${profile}|${period}`;
+  useEffect(() => {
+    setInsight(null);
+    fetch(`/api/social/insights?scope=${encodeURIComponent(scope)}`)
+      .then((r) => r.json())
+      .then((j) => setInsight(j.insight));
+  }, [scope]);
+
+  async function analyze() {
+    setAiBusy(true);
+    setAiNote("Claude разбирает посты среза…");
+    try {
+      const r = await fetch("/api/social/insights", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ scope, posts: periodPosts }),
+      });
+      const j = await r.json();
+      if (j.error) setAiNote(`Не вышло: ${j.error}`);
+      else { setInsight(j.insight); setAiNote(""); }
+    } catch (e: any) {
+      setAiNote(`Не вышло: ${e.message}`);
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  // Хитмап «день × часы» считаем сами из постов — модели он не нужен
+  const heat = useMemo(() => {
+    const buckets = [[6, 9], [9, 12], [12, 15], [15, 17], [17, 19], [19, 22]];
+    const grid: number[][] = Array.from({ length: 7 }, () => buckets.map(() => 0));
+    const cnt: number[][] = Array.from({ length: 7 }, () => buckets.map(() => 0));
+    for (const p of posts) {
+      const d = new Date(p.timestamp);
+      const msk = new Date(d.toLocaleString("en-US", { timeZone: "Europe/Moscow" }));
+      const day = (msk.getDay() + 6) % 7;
+      const hour = msk.getHours();
+      const bi = buckets.findIndex(([a, b]) => hour >= a && hour < b);
+      if (bi < 0) continue;
+      grid[day][bi] += p.views || 0;
+      cnt[day][bi]++;
+    }
+    const avg = grid.map((row, d) => row.map((v, i) => (cnt[d][i] ? v / cnt[d][i] : 0)));
+    const max = Math.max(1, ...avg.flat());
+    return { avg, max, buckets, has: cnt.flat().some((c) => c > 0) };
+  }, [posts]);
+
+  const postById = useMemo(() => new Map(posts.map((p) => [p.id, p])), [posts]);
+
   const updatedAt = accounts.length
     ? new Date(Math.max(...accounts.map((a) => +new Date(a.updatedAt)))).toLocaleString("ru-RU")
     : "ещё не собиралось";
@@ -296,6 +348,108 @@ export default function SocialDashboard() {
           </div>
         </div>
       )}
+
+      <div className="card">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
+          <div>
+            <h2 className="font-semibold">🧠 Нейро-аналитика контента</h2>
+            <p className="text-xs text-gray-400">
+              {insight
+                ? `${insight.postsAnalyzed} постов · анализ от ${new Date(insight.updatedAt).toLocaleString("ru-RU")}`
+                : "Claude разберёт посты выбранного среза: темы, тексты, время, форматы"}
+            </p>
+          </div>
+          <button className="btn btn-primary" onClick={analyze} disabled={aiBusy}>
+            {aiBusy ? "Анализирую…" : insight ? "✨ Обновить анализ" : "✨ Проанализировать"}
+          </button>
+        </div>
+        {aiNote && <p className="text-sm text-gray-500">{aiNote}</p>}
+
+        {insight && (
+          <div className="space-y-4 mt-3">
+            <div className="border-l-4 border-brand-600 bg-blue-50 rounded-r-lg px-4 py-3 text-sm">
+              <b>Главный вывод:</b> {insight.summary}
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div>
+                <h3 className="text-sm font-semibold mb-2">✅ Что заходит</h3>
+                {insight.working.map((w: any, i: number) => (
+                  <div key={i} className="py-2 border-t first:border-t-0 text-sm">
+                    {w.pattern}
+                    <div className="text-xs text-green-700 mt-0.5">{w.evidence}</div>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-2">❌ Что не заходит</h3>
+                {insight.not_working.map((w: any, i: number) => (
+                  <div key={i} className="py-2 border-t first:border-t-0 text-sm">
+                    {w.pattern}
+                    <div className="text-xs text-red-700 mt-0.5">{w.evidence}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {heat.has && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-2">⏰ Лучшее время <span className="text-xs text-gray-400 font-normal">средние просмотры, МСК</span></h3>
+                  <table className="w-full border-separate" style={{ borderSpacing: 3 }}>
+                    <thead><tr>
+                      <th></th>
+                      {heat.buckets.map(([a, b]) => <th key={a} className="text-xs text-gray-400 font-normal">{a}-{b}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {["пн", "вт", "ср", "чт", "пт", "сб", "вс"].map((d, di) => (
+                        <tr key={d}>
+                          <td className="text-xs text-gray-400 pr-1">{d}</td>
+                          {heat.avg[di].map((v, i) => (
+                            <td key={i} title={`${d} ${heat.buckets[i][0]}-${heat.buckets[i][1]}: ${fmt(Math.round(v))} просм`}
+                              className="h-6 rounded-md"
+                              style={{ background: v === 0 ? "#f3f4f6" : `rgba(37, 99, 235, ${0.15 + 0.85 * (v / heat.max)})` }} />
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div>
+                <h3 className="text-sm font-semibold mb-2">🎯 Рекомендации</h3>
+                {insight.recommendations.map((r: string, i: number) => (
+                  <div key={i} className="flex gap-2 py-1.5 text-sm">
+                    <span className="bg-brand-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shrink-0">{i + 1}</span>
+                    {r}
+                  </div>
+                ))}
+              </div>
+            </div>
+            {(insight.top_post_ids?.length > 0 || insight.flop_post_ids?.length > 0) && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {[["🏆 Топ периода", insight.top_post_ids], ["📉 Антитоп", insight.flop_post_ids]].map(([label, ids]: any) => (
+                  <div key={label}>
+                    <h3 className="text-sm font-semibold mb-2">{label}</h3>
+                    {ids.map((id: string) => {
+                      const p = postById.get(id);
+                      if (!p) return null;
+                      return (
+                        <a key={id} href={p.permalink} target="_blank" className="flex gap-2 items-center py-1.5 text-sm hover:bg-gray-50 rounded-lg px-1">
+                          {p.thumbnail ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={p.thumbnail} alt="" className="w-8 h-11 object-cover rounded bg-gray-100" />
+                          ) : <span className="w-8 h-11 bg-gray-100 rounded" />}
+                          <span className="line-clamp-1 flex-1">{p.caption || "(без подписи)"}</span>
+                          <b className="whitespace-nowrap">{fmt(p.views)}</b>
+                        </a>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {factoryStatus && (
         <div className={`card flex items-center gap-3 text-sm ${factoryStatus.ok ? "" : "border-yellow-400 bg-yellow-50"}`}>

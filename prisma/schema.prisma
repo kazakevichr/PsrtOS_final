@@ -241,3 +241,12 @@ model FactoryDefect {
   comment String   @default("")
   at      DateTime @default(now())
 }
+
+// Нейро-аналитика контента: сохранённые разборы «что заходит / что не
+// заходит» по срезу (платформа|проект|профиль|период). Храним, чтобы не
+// звать модель при каждом открытии страницы.
+model SocialInsight {
+  scope     String   @id
+  result    String   @default("{}")
+  updatedAt DateTime @updatedAt
+}
