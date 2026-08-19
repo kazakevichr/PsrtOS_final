@@ -49,8 +49,7 @@ export default async function Navbar() {
         kanbanDropdown,
         lostLink,
         tasksLink,
-        navLink("/insta", "Инстаграм"),
-        navLink("/oracle", "Оракл"),
+        navLink("/social", "Соц.Сети"),
         navLink("/factory", "Контент-завод"),
         navLink("/settings/projects", "Настройки"),
       ]

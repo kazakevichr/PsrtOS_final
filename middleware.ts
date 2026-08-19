@@ -12,6 +12,7 @@ export const config = {
     "/lost/:path*",
     "/settings/:path*",
     "/insta/:path*",
+    "/social/:path*",
     "/oracle/:path*",
     "/factory/:path*",
   ],
