@@ -4,7 +4,6 @@
 // (или стандартные ANTHROPIC_API_KEY / ANTHROPIC_BASE_URL).
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod/v4";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { prisma } from "@/lib/prisma";
 
 const InsightSchema = z.object({
@@ -50,7 +49,10 @@ export async function generateInsight(scope: string, posts: any[]): Promise<Insi
 
   const baseURL = process.env.ANTHROPIC_BASE_URL || process.env.CLAUDE_BASE_URL;
   const client = new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}) });
-  const response = await client.messages.parse({
+  // Обычный create + свой парсинг: structured output роутер Оракла не
+  // пропускает (проверено — модель отвечает прозой), поэтому формат
+  // держим инструкцией и валидируем zod-схемой сами.
+  const response = await client.messages.create({
     model: "claude-opus-5",
     max_tokens: 16000,
     system:
@@ -61,19 +63,29 @@ export async function generateInsight(scope: string, posts: any[]): Promise<Insi
       "Пиши по-русски, коротко и предметно, без воды. В working/not_working — 3-5 пунктов, " +
       "pattern — сам паттерн одной фразой, evidence — цифровое доказательство. " +
       "В recommendations — 3-5 конкретных действий. В top_post_ids/flop_post_ids — по 3 id " +
-      "лучших и худших постов относительно их потенциала.",
+      "лучших и худших постов относительно их потенциала. " +
+      "ОТВЕТ — СТРОГО ОДИН JSON-ОБЪЕКТ без пояснений, без markdown и без текста вокруг, вида: " +
+      '{"summary": "...", "working": [{"pattern": "...", "evidence": "..."}], ' +
+      '"not_working": [{"pattern": "...", "evidence": "..."}], "recommendations": ["..."], ' +
+      '"top_post_ids": ["..."], "flop_post_ids": ["..."]}',
     messages: [{
       role: "user",
       content: `Посты профиля за период (JSON):\n${JSON.stringify(rows, null, 0)}`,
     }],
-    output_config: { format: zodOutputFormat(InsightSchema) },
   });
 
   if (response.stop_reason === "refusal") {
     throw new Error("модель отклонила запрос — попробуй ещё раз");
   }
-  const parsed = response.parsed_output;
-  if (!parsed) throw new Error("модель вернула невалидный ответ — попробуй ещё раз");
+  const text = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === "text")
+    .map((b) => b.text)
+    .join("");
+  const m = text.match(/\{[\s\S]*\}/);
+  if (!m) throw new Error("модель не вернула JSON — попробуй ещё раз");
+  const check = InsightSchema.safeParse(JSON.parse(m[0]));
+  if (!check.success) throw new Error("ответ модели не прошёл валидацию — попробуй ещё раз");
+  const parsed = check.data;
 
   const result: Insight = {
     ...parsed,
