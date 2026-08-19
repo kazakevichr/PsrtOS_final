@@ -100,7 +100,14 @@ export default function SocialDashboard() {
       sub: fDelta === 0 ? `без изменений за ${period} дн` : `${fDelta > 0 ? "↑ +" : "↓ "}${fmt(fDelta)} за ${period} дн`,
       subClass: fDelta > 0 ? "text-green-600" : fDelta < 0 ? "text-red-600" : "text-gray-500",
     },
-    { label: `Просмотры за ${period} дн`, value: fmt(sumHist("views")), sub: "по дневным срезам", subClass: "text-gray-500" },
+    {
+      label: `Просмотры за ${period} дн`,
+      value: fmt(sumHist("views")),
+      sub: sumHist("views") === 0 && sumPosts("views") > 0
+        ? "дневная история копится с 19.08 — цифра появится завтра"
+        : "по дневным срезам",
+      subClass: "text-gray-500",
+    },
     { label: `Постов за ${period} дн`, value: fmt(periodPosts.length),
       sub: `завод ${periodPosts.filter((p) => p.source === "factory").length} · вручную ${periodPosts.filter((p) => p.source !== "factory").length}`,
       subClass: "text-gray-500" },
@@ -284,7 +291,7 @@ export default function SocialDashboard() {
                       )}
                       <div className="min-w-0">
                         <div className="text-xs text-gray-400 mb-0.5">
-                          @{p.username}
+                          {String(p.username || "").startsWith("@") ? p.username : `@${p.username}`}
                           <span className="ml-2">{PLATFORM_NAMES[p.platform] || p.platform}</span>
                           <span className="ml-2">{p.source === "factory" ? "🏭 завод" : "✋ вручную"}</span>
                           {p.type && <span className="badge-green ml-2">{p.type}</span>}
