@@ -16,6 +16,12 @@ model User {
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
 
+  // Телеграм: chatId появляется после привязки профиля через бота,
+  // tgLinkCode — одноразовый код в ссылке t.me/...?start=<code>.
+  tgChatId     String?  @unique
+  tgUsername   String?
+  tgLinkCode   String?  @unique
+
   partners     Partner[]      @relation("ResponsibleUser")
   tasks        Task[]         @relation("AssignedUser")
   transactions Transaction[]  @relation("CreatedByUser")
@@ -249,4 +255,16 @@ model SocialInsight {
   scope     String   @id
   result    String   @default("{}")
   updatedAt DateTime @updatedAt
+}
+
+// Заявка на доступ из Телеграма: сотрудник написал боту /start, ждёт
+// одобрения владельца. Одобрить может только владелец — из бота или из
+// раздела «Сотрудники».
+model TgSignup {
+  id        String   @id @default(cuid())
+  chatId    String   @unique
+  username  String?
+  name      String?
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
 }

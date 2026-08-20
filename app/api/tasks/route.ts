@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { notifyUser } from "@/lib/telegram";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
@@ -36,5 +37,11 @@ export async function POST(req: Request) {
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
     },
   });
+
+  // Пуш исполнителю: свои же задачи себе не присылаем.
+  if (task.assignedToUserId !== session.user.id) {
+    const due = task.dueDate ? `\nСрок: ${task.dueDate.toLocaleDateString("ru-RU")}` : "";
+    void notifyUser(task.assignedToUserId, `📌 <b>Новая задача</b>\n${task.title}${due}`);
+  }
   return NextResponse.json(task);
 }

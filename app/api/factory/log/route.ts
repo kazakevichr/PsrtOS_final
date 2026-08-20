@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { notifyRoles } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,17 @@ export async function POST(req: Request) {
         update: { topic: fields.topic },
       });
     }
+  }
+  // Пуш в Телеграм: публикации и сбои — СММ и владельцу.
+  if (fields.event === "опубликован") {
+    const where = links.map((l: any) => `<a href="${l.link}">${l.account}</a>`).join(", ");
+    void notifyRoles(["SMM", "OWNER"],
+      `📤 <b>Опубликовано</b>${fields.kind ? ` · ${fields.kind}` : ""}\n${fields.topic || "(без темы)"}` +
+      (where ? `\n${where}` : ""));
+  } else if (fields.event === "ошибка" || fields.event === "не принят") {
+    void notifyRoles(["SMM", "OWNER"],
+      `⚠️ <b>Завод: ${fields.event}</b>${fields.kind ? ` · ${fields.kind}` : ""}\n` +
+      `${fields.topic || "(без темы)"}${fields.error ? `\n${fields.error}` : ""}`);
   }
   return NextResponse.json({ ok: true });
 }

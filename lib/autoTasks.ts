@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { computeHealth } from "@/lib/economics";
+import { notifyUser } from "@/lib/telegram";
 
 /**
  * Проверяет активных партнёров сотрудника и автоматически создаёт задачу-напоминание,
@@ -24,14 +25,16 @@ export async function ensureAutoTasksForUser(userId: string) {
     if (partnersWithOpenAutoTask.has(partner.id)) continue;
 
     const label = health === "RED" ? "давно нет активности — под угрозой оттока" : "пора написать, начинает остывать";
+    const title = `${partner.name} (${partner.project.name}): ${label}`;
     await prisma.task.create({
       data: {
         assignedToUserId: userId,
         partnerId: partner.id,
-        title: `${partner.name} (${partner.project.name}): ${label}`,
+        title,
         dueDate: new Date(),
         isAuto: true,
       },
     });
+    void notifyUser(userId, `⏰ <b>Партнёр требует внимания</b>\n${title}`);
   }
 }
