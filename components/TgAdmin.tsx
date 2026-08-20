@@ -29,7 +29,7 @@ export default function TgAdmin() {
     setNote("");
     const r = await fetch("/api/tg/setup", { method: "POST" });
     const j = await r.json();
-    setNote(j.error ? `Не получилось: ${j.error}` : j.secured ? "Бот подключён (с секретом)." : "Бот подключён. Секрет вебхука не задан — стоит добавить TELEGRAM_WEBHOOK_SECRET.");
+    setNote(j.error ? `Не получилось: ${j.error}` : j.secured ? "Бот подключён (с секретом)." : "Бот подключён. Секрет вебхука не задан — стоит добавить TELEGRAM_WEBHOOK_SECRET_DOBRO.");
     setBusy(false);
     load();
   }
@@ -60,7 +60,7 @@ export default function TgAdmin() {
             {!state
               ? "Проверяю…"
               : !state.configured
-                ? "Токен бота не задан в окружении (TELEGRAM_BOT_TOKEN)"
+                ? "Токен бота не задан в окружении (TELEGRAM_BOT_TOKEN_DOBRO)"
                 : hooked
                   ? "Подключён — заявки и пуши работают"
                   : "Токен есть, но вебхук не подключён к этому сайту"}

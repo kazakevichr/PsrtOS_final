@@ -4,8 +4,14 @@ import { prisma } from "@/lib/prisma";
 
 // Бот @dobro_inc_bot: заявки на доступ, привязка профилей и пуши сотрудникам.
 // Токен живёт только в env (TELEGRAM_BOT_TOKEN), в коде и в базе его нет.
-const token = () => process.env.TELEGRAM_BOT_TOKEN || "";
+// Имена с суффиксом _DOBRO — основные (у Романа в Coolify так), без суффикса
+// оставлены как запасные, чтобы обе схемы работали.
+const token = () => process.env.TELEGRAM_BOT_TOKEN_DOBRO || process.env.TELEGRAM_BOT_TOKEN || "";
 export const botConfigured = () => Boolean(token());
+export const webhookSecret = () =>
+  process.env.TELEGRAM_WEBHOOK_SECRET_DOBRO || process.env.TELEGRAM_WEBHOOK_SECRET || "";
+export const botUsername = () =>
+  process.env.TELEGRAM_BOT_USERNAME_DOBRO || process.env.TELEGRAM_BOT_USERNAME || "dobro_inc_bot";
 
 type Button = { text: string; callback_data: string };
 

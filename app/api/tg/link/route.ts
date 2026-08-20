@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { newLinkCode } from "@/lib/telegram";
+import { newLinkCode, botUsername } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     where: { id: b.userId },
     data: { tgLinkCode: code, tgChatId: null, tgUsername: null },
   });
-  const bot = process.env.TELEGRAM_BOT_USERNAME || "dobro_inc_bot";
+  const bot = botUsername();
   return NextResponse.json({ name: user.name, link: `https://t.me/${bot}?start=${code}` });
 }
 

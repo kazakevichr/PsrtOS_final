@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { botConfigured, tgCall } from "@/lib/telegram";
+import { botConfigured, tgCall, webhookSecret } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   if (!(await owner())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!botConfigured()) return NextResponse.json({ error: "нет TELEGRAM_BOT_TOKEN в окружении" }, { status: 400 });
-  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const secret = webhookSecret();
   const res = await tgCall("setWebhook", {
     url: `${appUrl(req)}/api/tg/webhook`,
     allowed_updates: ["message", "callback_query"],

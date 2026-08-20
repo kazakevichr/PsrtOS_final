@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { approveSignup, askOwner, rejectSignup, sendTo, tgCall, ownerWithTg, ROLE_NAME } from "@/lib/telegram";
+import { approveSignup, askOwner, rejectSignup, sendTo, tgCall, ownerWithTg, webhookSecret, ROLE_NAME } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,7 @@ const HELP =
 // Апдейты от Телеграма. Регистрация только по одобрению владельца: сам факт
 // написать боту доступа не даёт.
 export async function POST(req: Request) {
-  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  const secret = webhookSecret();
   if (secret && req.headers.get("x-telegram-bot-api-secret-token") !== secret) {
     return new NextResponse("forbidden", { status: 403 });
   }
