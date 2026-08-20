@@ -34,6 +34,18 @@ function Delta({ cur, prev }: { cur: number; prev: number }) {
   );
 }
 
+// Абсолютное изменение для малых величин (подписчики): +6 / −2, где проценты
+// врут — +1 подписчик на 2000 это 0.05% и «без изменений», хотя рост есть.
+function AbsDelta({ cur, prev }: { cur: number; prev: number }) {
+  const d = cur - prev;
+  if (d === 0) return <span className="text-gray-400">без изменений</span>;
+  return (
+    <span className={d > 0 ? "text-green-600" : "text-red-600"}>
+      {d > 0 ? "▲ +" : "▼ −"}{fmt(Math.abs(d))}
+    </span>
+  );
+}
+
 // Мини-график тренда (как у CoinMarketCap): линия без осей и подписей
 function Spark({ points, up }: { points: number[]; up: boolean }) {
   if (points.length < 2) return null;
@@ -490,8 +502,8 @@ export default function SocialDashboard() {
                 const last = hist[hist.length - 1].followers;
                 return (
                   <div className="text-sm mt-0.5">
-                    <Delta cur={last} prev={first} />
-                    <span className="text-gray-400 text-xs"> подписчики за {period} дн</span>
+                    <AbsDelta cur={last} prev={first} />
+                    <span className="text-gray-400 text-xs"> подписчиков за {period} дн</span>
                   </div>
                 );
               })()}
