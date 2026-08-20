@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "OWNER") {
+  if (!session || !["OWNER", "SMM"].includes(session.user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const days = Number(new URL(req.url).searchParams.get("days") || 30);

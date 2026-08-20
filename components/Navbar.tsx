@@ -6,16 +6,26 @@ import SignOutButton from "@/components/SignOutButton";
 import ProjectsNavDropdown from "@/components/ProjectsNavDropdown";
 import SidebarShell from "@/components/SidebarShell";
 
+const ROLE_LABEL: Record<string, string> = {
+  OWNER: "владелец",
+  MANAGER: "менеджер партнёров",
+  SMM: "СММ",
+};
+
 export default async function Navbar() {
   const session = await getServerSession(authOptions);
   if (!session) return null;
-  const isOwner = session.user.role === "OWNER";
+  const role = session.user.role;
+  const isOwner = role === "OWNER";
 
-  const projects = await prisma.project.findMany({
-    where: { isActive: true },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
+  // СММ не работает с проектами — не дёргаем базу зря.
+  const projects = isOwner || role === "MANAGER"
+    ? await prisma.project.findMany({
+        where: { isActive: true },
+        orderBy: { name: "asc" },
+        select: { id: true, name: true },
+      })
+    : [];
 
   const linkClass = "px-3 py-2 rounded-lg hover:bg-gray-50 hover:text-brand-700";
 
@@ -25,42 +35,53 @@ export default async function Navbar() {
     </Link>
   );
 
-  const kanbanDropdown = <ProjectsNavDropdown key="kanban" projects={projects} />;
-  const dashboardLink = navLink("/", "Дашборд");
-  // Раньше называлась "ИИ-помощник" — теперь раздел "Проекты" (по запросу).
-  const projectsLink = navLink("/assistant", "🤖 Проекты");
-  const partnersLink = isOwner ? navLink("/partners", "Партнёры") : navLink("/my-partners", "Мои партнёры");
-  const tasksLink = navLink("/tasks", "Задачи");
-  const payrollLink = navLink("/payroll", "Зарплата");
-  const lostLink = navLink("/lost", "Упущенные");
+  const groupTitle = (title: string) => (
+    <div key={`g-${title}`} className="px-3 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400 first:pt-0">
+      {title}
+    </div>
+  );
 
-  // У владельца порядок вкладок: Дашборд, Зарплата, Сотрудники, Партнёры,
-  // Канбан, Упущенные, Задачи, Настройки. Отдельная ссылка "Проекты"
-  // (ИИ-помощник) владельцу не нужна — помощник уже встроен в страницу проекта.
-  // У менеджера — свой порядок: Зарплата, Мои партнёры, Канбан, Проекты,
-  // Упущенные, Задачи. Раздела "Дашборд" у менеджера нет — его данные
-  // показаны наверху страницы "Зарплата".
+  const kanbanDropdown = <ProjectsNavDropdown key="kanban" projects={projects} />;
+
+  const partnerGroup = [
+    groupTitle("Партнёрский менеджмент"),
+    navLink("/tasks", "Задачи"),
+    isOwner ? navLink("/partners", "Партнёры") : navLink("/my-partners", "Мои партнёры"),
+    kanbanDropdown,
+    // Раньше называлась "ИИ-помощник" — раздел "Проекты" нужен только менеджеру:
+    // владельцу помощник уже встроен в страницу проекта.
+    ...(isOwner ? [] : [navLink("/assistant", "🤖 Проекты")]),
+    navLink("/lost", "Упущенные"),
+  ];
+
+  const smmGroup = [
+    groupTitle("СММ"),
+    navLink("/social", "Соц.Сети"),
+    navLink("/factory", "Контент-завод"),
+  ];
+
+  const teamGroup = [
+    groupTitle("Управление командой"),
+    navLink("/", "Дашборд"),
+    navLink("/settings/users", "Сотрудники"),
+    navLink("/payroll", "Зарплата"),
+    navLink("/settings/projects", "Настройки"),
+  ];
+
+  // Владелец видит всё; менеджер партнёров — только партнёрский блок и свою
+  // зарплату; СММ — только блок СММ.
   const items = isOwner
-    ? [
-        dashboardLink,
-        payrollLink,
-        navLink("/settings/users", "Сотрудники"),
-        partnersLink,
-        kanbanDropdown,
-        lostLink,
-        tasksLink,
-        navLink("/social", "Соц.Сети"),
-        navLink("/factory", "Контент-завод"),
-        navLink("/settings/projects", "Настройки"),
-      ]
-    : [payrollLink, partnersLink, kanbanDropdown, projectsLink, lostLink, tasksLink];
+    ? [...partnerGroup, ...smmGroup, ...teamGroup]
+    : role === "SMM"
+      ? smmGroup
+      : [...partnerGroup, navLink("/payroll", "Зарплата")];
 
   return (
     <SidebarShell
       footer={
         <>
           <div>
-            {session.user.name} ({isOwner ? "владелец" : "менеджер"})
+            {session.user.name} ({ROLE_LABEL[role] || "сотрудник"})
           </div>
           <SignOutButton />
         </>

@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 // профиль — три оси, по которым фильтрует дашборд «Соц.Сети».
 export async function GET() {
   const session = await getServerSession(authOptions);
-  if (!session || session.user.role !== "OWNER") {
+  if (!session || !["OWNER", "SMM"].includes(session.user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

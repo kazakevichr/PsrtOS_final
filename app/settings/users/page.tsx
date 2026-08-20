@@ -47,7 +47,7 @@ export default async function UsersSettingsPage() {
               <tr key={u.id} className={`border-b last:border-0 ${!u.isActive ? "opacity-50" : ""}`}>
                 <td className="py-2 pr-4">{u.name}</td>
                 <td className="py-2 pr-4">{u.email}</td>
-                <td className="py-2 pr-4">{u.role === "OWNER" ? "Владелец" : "Менеджер"}</td>
+                <td className="py-2 pr-4">{u.role === "OWNER" ? "Владелец" : u.role === "SMM" ? "СММ" : "Менеджер партнёров"}</td>
                 <td className="py-2 pr-4">{u.fixedSalary.toLocaleString("ru-RU")} ₽</td>
                 <td className="py-2 pr-4">{new Date(u.createdAt).toLocaleDateString("ru-RU")}</td>
                 <td className="py-2 pr-4">{u.activePartners}</td>

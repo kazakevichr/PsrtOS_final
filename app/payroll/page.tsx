@@ -12,6 +12,7 @@ export default async function PayrollPage({
 }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
+  if (session.user.role === "SMM") redirect("/social");
 
   const isOwner = session.user.role === "OWNER";
   const periodType = (isOwner && (searchParams.period as PeriodType)) || "month";
@@ -19,7 +20,7 @@ export default async function PayrollPage({
 
   let userIds: string[];
   if (isOwner) {
-    const managers = await prisma.user.findMany({ where: { role: "MANAGER", isActive: true } });
+    const managers = await prisma.user.findMany({ where: { role: { in: ["MANAGER", "SMM"] }, isActive: true } });
     userIds = managers.map((m) => m.id);
   } else {
     userIds = [session.user.id];

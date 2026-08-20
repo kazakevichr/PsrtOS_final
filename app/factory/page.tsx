@@ -3,10 +3,11 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import FactoryDashboard from "@/components/FactoryDashboard";
 
-// Контент-завод: план тем и статистика производства — только владельцу.
+// Контент-завод: план тем и статистика производства.
+// Доступ: владелец (полный) и СММ (просмотр + отметка косяков).
 export default async function FactoryPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
-  if (session.user.role !== "OWNER") redirect("/payroll");
-  return <FactoryDashboard />;
+  if (!["OWNER", "SMM"].includes(session.user.role)) redirect("/payroll");
+  return <FactoryDashboard canManage={session.user.role === "OWNER"} />;
 }

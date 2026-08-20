@@ -35,12 +35,16 @@ export async function POST(req: Request) {
   const passwordHash = await bcrypt.hash(body.password, 10);
   const fixedSalary = body.fixedSalary !== undefined && body.fixedSalary !== "" ? Number(body.fixedSalary) : 15000;
 
+  // Две роли сотрудников: менеджер партнёров и СММ. Владельца через этот
+  // роут создать нельзя.
+  const role = body.role === "SMM" ? "SMM" : "MANAGER";
+
   const user = await prisma.user.create({
     data: {
       name: body.name,
       email: body.email,
       passwordHash,
-      role: "MANAGER",
+      role,
       fixedSalary: Number.isFinite(fixedSalary) ? fixedSalary : 15000,
     },
   });

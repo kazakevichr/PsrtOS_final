@@ -11,8 +11,14 @@ async function owner() {
   return session && session.user.role === "OWNER";
 }
 
+// Читать сохранённый анализ может и СММ; запускать новый — только владелец.
+async function viewer() {
+  const session = await getServerSession(authOptions);
+  return session && ["OWNER", "SMM"].includes(session.user.role);
+}
+
 export async function GET(req: Request) {
-  if (!(await owner())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await viewer())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const scope = new URL(req.url).searchParams.get("scope") || "";
   return NextResponse.json({ insight: await savedInsight(scope) });
 }

@@ -8,6 +8,7 @@ export default function CreateUserForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fixedSalary, setFixedSalary] = useState("15000");
+  const [role, setRole] = useState("MANAGER");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,7 +20,7 @@ export default function CreateUserForm() {
       const res = await fetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, fixedSalary, role: "MANAGER" }),
+        body: JSON.stringify({ name, email, password, fixedSalary, role }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -45,8 +46,12 @@ export default function CreateUserForm() {
       <input className="input" placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
       <input className="input" placeholder="Пароль" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
       <input className="input" placeholder="Оклад" type="number" value={fixedSalary} onChange={(e) => setFixedSalary(e.target.value)} />
-      <button className="btn btn-primary sm:col-span-4" disabled={busy} type="submit">
-        {busy ? "Добавляем…" : "Добавить менеджера"}
+      <select className="input sm:col-span-2" value={role} onChange={(e) => setRole(e.target.value)}>
+        <option value="MANAGER">Менеджер партнёров — партнёрский менеджмент</option>
+        <option value="SMM">СММ — только Соц.Сети и Контент-завод</option>
+      </select>
+      <button className="btn btn-primary sm:col-span-2" disabled={busy} type="submit">
+        {busy ? "Добавляем…" : "Добавить сотрудника"}
       </button>
     </form>
   );

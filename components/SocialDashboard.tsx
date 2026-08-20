@@ -72,7 +72,7 @@ function humanError(e: string): string {
   return e;
 }
 
-export default function SocialDashboard() {
+export default function SocialDashboard({ canManage = true }: { canManage?: boolean }) {
   const [all, setAll] = useState<any[]>([]);
   const [period, setPeriod] = useState(7);
   const [platform, setPlatform] = useState("all");
@@ -284,9 +284,11 @@ export default function SocialDashboard() {
             Все платформы и проекты · обновлено {updatedAt} · авто-сбор каждые 20 минут
           </p>
         </div>
-        <button className="btn btn-primary" onClick={collectNow} disabled={busy}>
-          {busy ? "Собираю…" : "🔄 Обновить статистику"}
-        </button>
+        {canManage && (
+          <button className="btn btn-primary" onClick={collectNow} disabled={busy}>
+            {busy ? "Собираю…" : "🔄 Обновить статистику"}
+          </button>
+        )}
       </div>
       {note && <p className="text-sm text-gray-500">{note}</p>}
 
@@ -371,9 +373,11 @@ export default function SocialDashboard() {
                 : "Claude разберёт посты выбранного среза: темы, тексты, время, форматы"}
             </p>
           </div>
-          <button className="btn btn-primary" onClick={analyze} disabled={aiBusy}>
-            {aiBusy ? "Анализирую…" : insight ? "✨ Обновить анализ" : "✨ Проанализировать"}
-          </button>
+          {canManage && (
+            <button className="btn btn-primary" onClick={analyze} disabled={aiBusy}>
+              {aiBusy ? "Анализирую…" : insight ? "✨ Обновить анализ" : "✨ Проанализировать"}
+            </button>
+          )}
         </div>
         {aiNote && <p className="text-sm text-gray-500">{aiNote}</p>}
 

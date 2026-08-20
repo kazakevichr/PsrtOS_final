@@ -12,6 +12,12 @@ async function owner() {
   return session && session.user.role === "OWNER";
 }
 
+// План может смотреть и СММ; править и генерировать — только владелец.
+async function viewer() {
+  const session = await getServerSession(authOptions);
+  return session && ["OWNER", "SMM"].includes(session.user.role);
+}
+
 function monthDates(month: string): string[] {
   const [y, m] = month.split("-").map(Number);
   const days = new Date(y, m, 0).getDate();
@@ -19,7 +25,7 @@ function monthDates(month: string): string[] {
 }
 
 export async function GET(req: Request) {
-  if (!(await owner())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await viewer())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const month = new URL(req.url).searchParams.get("month") || new Date().toISOString().slice(0, 7);
   const rows = await prisma.planSlot.findMany({ where: { date: { startsWith: month } } });
   return NextResponse.json({ month, slots: SLOTS, dates: monthDates(month), plan: rows });

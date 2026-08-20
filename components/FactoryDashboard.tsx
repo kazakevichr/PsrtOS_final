@@ -21,7 +21,7 @@ function monthShift(month: string, delta: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export default function FactoryDashboard() {
+export default function FactoryDashboard({ canManage = true }: { canManage?: boolean }) {
   const [tab, setTab] = useState<"plan" | "stats">("plan");
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [plan, setPlan] = useState<any>(null);
@@ -138,9 +138,11 @@ export default function FactoryDashboard() {
               </span>
               <button className="btn" onClick={() => setMonth(monthShift(month, 1))}>→</button>
             </div>
-            <button className="btn btn-primary" onClick={generate} disabled={busy}>
-              {busy ? "Генерирую…" : "✨ Сгенерировать темы на месяц"}
-            </button>
+            {canManage && (
+              <button className="btn btn-primary" onClick={generate} disabled={busy}>
+                {busy ? "Генерирую…" : "✨ Сгенерировать темы на месяц"}
+              </button>
+            )}
           </div>
           <table className="w-full text-sm border-collapse min-w-[900px]">
             <thead>
@@ -163,10 +165,11 @@ export default function FactoryDashboard() {
                     <td key={s.slot} className="p-1 align-top">
                       <textarea
                         rows={2}
+                        readOnly={!canManage}
                         defaultValue={cell(date, s.slot)?.topic || ""}
                         placeholder={s.active ? "тема…" : "заморожен"}
                         title={cell(date, s.slot)?.facts || ""}
-                        onBlur={(e) => saveCell(date, s.slot, e.target.value)}
+                        onBlur={(e) => canManage && saveCell(date, s.slot, e.target.value)}
                         className={`w-full text-xs border rounded-md p-1.5 resize-none focus:outline-none focus:ring-1 focus:ring-brand-500 ${
                           s.active ? "bg-white" : "bg-gray-50"
                         }`}

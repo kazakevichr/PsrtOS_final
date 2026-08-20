@@ -13,7 +13,9 @@ export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
   // Дашборд с общими цифрами компании — только для владельца.
-  // У менеджера свои результаты по проектам показаны наверху страницы "Зарплата".
+  // У менеджера свои результаты по проектам показаны наверху страницы "Зарплата",
+  // СММ живёт в своём блоке — Соц.Сети.
+  if (session.user.role === "SMM") redirect("/social");
   if (session.user.role !== "OWNER") redirect("/payroll");
 
   const projects = await prisma.project.findMany({
@@ -25,7 +27,7 @@ export default async function DashboardPage() {
   const [start, end] = [new Date(month + "-01T00:00:00Z"), new Date()];
 
   const managers = await prisma.user.findMany({
-    where: { role: "MANAGER", isActive: true },
+    where: { role: { in: ["MANAGER", "SMM"] }, isActive: true },
     include: { partners: true },
   });
   const payrolls = await Promise.all(managers.map((m) => computePayroll(m.id, month)));
