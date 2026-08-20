@@ -28,6 +28,7 @@ export default function FactoryDashboard() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const [onlyDefects, setOnlyDefects] = useState(false);
 
   async function loadPlan(m: string) {
     const r = await fetch(`/api/factory/plan-admin?month=${m}`);
@@ -216,10 +217,21 @@ export default function FactoryDashboard() {
           )}
 
           <div className="card">
-            <h2 className="font-semibold mb-3">Журнал производства</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h2 className="font-semibold">{onlyDefects ? "Журнал косяков" : "Журнал производства"}</h2>
+              <button
+                className={`btn text-sm ${onlyDefects ? "bg-red-600 text-white" : "border border-red-200 text-red-700 bg-red-50 hover:bg-red-100"}`}
+                onClick={() => setOnlyDefects(!onlyDefects)}
+              >
+                {onlyDefects ? "← Все записи" : `⚠️ Журнал косяков (${jobs.filter((j) => ["не принят", "брак", "ошибка"].includes(j.event)).length})`}
+              </button>
+            </div>
             {!jobs.length && <p className="text-sm text-gray-500">Пока пусто — завод ещё не докладывал о заказах.</p>}
+            {onlyDefects && !jobs.filter((j) => ["не принят", "брак", "ошибка"].includes(j.event)).length && jobs.length > 0 && (
+              <p className="text-sm text-gray-500">Косяков нет — все заказы прошли чисто. 🎉</p>
+            )}
             <div className="space-y-2">
-              {jobs.map((j) => (
+              {(onlyDefects ? jobs.filter((j) => ["не принят", "брак", "ошибка"].includes(j.event)) : jobs).map((j) => (
                 <details key={j.jobId} className="border rounded-lg p-2">
                   <summary className="flex flex-wrap items-center gap-2 cursor-pointer text-sm">
                     <span className={`px-2 py-0.5 rounded text-xs ${EVENT_BADGE[j.event] || "bg-gray-100 text-gray-600"}`}>{j.event || "?"}</span>
