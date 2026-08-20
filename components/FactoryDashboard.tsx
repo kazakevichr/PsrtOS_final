@@ -147,7 +147,7 @@ export default function FactoryDashboard() {
                 <th className="p-2 w-20">Дата</th>
                 {(plan.slots || []).map((s: any) => (
                   <th key={s.slot} className="p-2">
-                    {s.label} <span className="font-normal">{s.active ? `· ${s.time}` : "· ❄️"}</span>
+                    {s.label} <span className="font-normal">{s.active ? `· ${s.time} МСК` : "· ❄️"}</span>
                   </th>
                 ))}
               </tr>
@@ -223,7 +223,9 @@ export default function FactoryDashboard() {
                 <details key={j.jobId} className="border rounded-lg p-2">
                   <summary className="flex flex-wrap items-center gap-2 cursor-pointer text-sm">
                     <span className={`px-2 py-0.5 rounded text-xs ${EVENT_BADGE[j.event] || "bg-gray-100 text-gray-600"}`}>{j.event || "?"}</span>
-                    <span className="text-gray-400 text-xs">{new Date(j.at).toLocaleString("ru-RU")}</span>
+                    <span className="text-gray-400 text-xs" title={`у вас: ${new Date(j.at).toLocaleString("ru-RU")}`}>
+                      {new Date(j.at).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} МСК
+                    </span>
                     <span className="text-gray-500 text-xs">
                       {j.kind || j.slot}{j.character ? ` · ${j.character}` : ""}{j.onDemand ? " · по запросу" : ""}
                       {j.seconds ? ` · ⏱ ${Math.round(j.seconds / 60)} мин` : ""}{j.cost ? ` · $${j.cost.toFixed(2)}` : ""}
