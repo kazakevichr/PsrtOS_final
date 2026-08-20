@@ -343,7 +343,7 @@ export default function SocialDashboard() {
             {daily.map(([date, d]) => {
               const max = Math.max(1, ...daily.map(([, x]) => x.views));
               return (
-                <div key={date} className="flex-1 h-full flex flex-col justify-end items-center gap-0.5 group relative min-w-0">
+                <div key={date} className="flex-1 max-w-14 h-full flex flex-col justify-end items-center gap-0.5 group relative min-w-0">
                   <div className="hidden group-hover:block absolute -top-10 bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
                     {new Date(date + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}:{" "}
                     {fmt(d.views)} просм{d.reach ? ` · ${fmt(d.reach)} охват` : ""}
