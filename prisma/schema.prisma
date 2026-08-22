@@ -268,3 +268,15 @@ model TgSignup {
   status    String   @default("pending")
   createdAt DateTime @default(now())
 }
+
+// Что уже перезалито из Instagram на другие площадки — чтобы не публиковать
+// один и тот же ролик дважды. Пишет завод после успешной публикации.
+model MirrorLog {
+  id        Int      @id @default(autoincrement())
+  platform  String
+  permalink String
+  link      String   @default("")
+  at        DateTime @default(now())
+
+  @@unique([platform, permalink])
+}
