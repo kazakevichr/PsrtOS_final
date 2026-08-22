@@ -496,7 +496,7 @@ export default function SocialDashboard({ canManage = true }: { canManage?: bool
                 {a.title}
               </a>
               <div className="text-sm text-gray-500 truncate">
-                {PLATFORM_NAMES[a.platform] || a.platform}{a.lang ? ` ${LANG_NAMES[a.lang] || a.lang}` : ""} · {fmt(a.followers)} подп.
+                {PLATFORM_NAMES[a.platform] || a.platform}{a.lang && LANG_NAMES[a.lang] ? ` ${LANG_NAMES[a.lang]}` : ""} · {fmt(a.followers)} подп.
                 {a.source === "factory" ? " · 🏭" : ""}
               </div>
               {(() => {
