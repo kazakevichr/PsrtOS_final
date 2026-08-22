@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { brandFor } from "@/lib/insta";
 
 
 export const dynamic = "force-dynamic";
@@ -53,7 +54,12 @@ export async function GET() {
     accounts.push({
       id: `${r.platform}-${r.key}`,
       platform: r.platform === "yt" ? "youtube" : "tiktok",
-      brand: "oracle",
+      // Бренд канала берём из BRAND_MAP по хэндлу или ключу: так аккаунты
+      // СуперФита в TikTok/YouTube попадают в свой фильтр, а не в «Оракл».
+      // Не указанные в карте каналы остаются оракловскими, как было.
+      brand: [p.handle, r.key]
+        .map((x: any) => brandFor(String(x || "").replace(/^@/, "")))
+        .find((b: string) => b !== "other") || "oracle",
       username: p.handle || r.key,
       title: p.title || r.key,
       avatar: p.avatar || null,

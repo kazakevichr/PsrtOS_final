@@ -29,7 +29,7 @@ export function sourceFor(username: string): "factory" | "manual" {
   return factoryAccounts().includes((username || "").toLowerCase()) ? "factory" : "manual";
 }
 
-function brandFor(username: string): string {
+export function brandFor(username: string): string {
   const u = (username || "").toLowerCase();
   for (const [brand, users] of Object.entries(brandMap())) {
     if ((users || []).some((x) => x.toLowerCase().replace(/^@/, "") === u)) return brand;
