@@ -84,6 +84,38 @@ async function upsertChannel(platform: string, key: string, profile: any, snap: 
   });
 }
 
+// Приём статистики от завода: у СуперФита TikTok читается его приложением
+// (Display API), а не сервисом upload-post, поэтому цифры приходят к нам
+// снаружи и просто ложатся в ту же таблицу каналов.
+export async function ingestChannel(body: any) {
+  const platform = String(body?.platform || "");
+  const key = String(body?.key || "").replace(/^@/, "");
+  if (!["tiktok", "yt"].includes(platform) || !key) {
+    throw new Error("нужны platform (tiktok|yt) и key");
+  }
+  const date = String(body?.date || new Date().toISOString().slice(0, 10));
+  const p = body.profile || {};
+  const profile = {
+    title: p.title || `TikTok @${key}`,
+    handle: p.handle || key,
+    avatar: p.avatar ?? null,
+    followers: p.followers ?? 0,
+    videoCount: p.videoCount ?? null,
+    url: p.url || `https://tiktok.com/@${key}`,
+  };
+  const snap = {
+    date,
+    followers: body.snapshot?.followers ?? profile.followers ?? 0,
+    views: body.snapshot?.views ?? 0,
+    likes: body.snapshot?.likes ?? 0,
+    comments: body.snapshot?.comments ?? 0,
+    shares: body.snapshot?.shares ?? 0,
+  };
+  const media = Array.isArray(body.media) ? body.media.slice(0, 200) : [];
+  await upsertChannel(platform, key, profile, snap, media);
+  return { platform, key, date, media: media.length };
+}
+
 async function collectYt(lang: string, date: string) {
   const access = await ytAccessToken(lang);
   const ch = await ytApi(access, "channels", { part: "snippet,statistics,contentDetails", mine: "true" });
