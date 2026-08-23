@@ -30,6 +30,7 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [onlyDefects, setOnlyDefects] = useState(false);
+  const [manual, setManual] = useState<any>(null);
 
   async function loadPlan(m: string) {
     const r = await fetch(`/api/factory/plan-admin?month=${m}`);
@@ -45,6 +46,7 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
   }, [month]);
   useEffect(() => {
     loadJobs();
+    fetch("/api/factory/manual?days=60").then((r) => r.json()).then(setManual).catch(() => {});
   }, []);
 
   const cell = (date: string, slot: string) =>
@@ -189,7 +191,7 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
       {tab === "stats" && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="card"><div className="text-sm text-gray-500">Заказов за 60 дней</div><div className="text-2xl font-bold mt-1">{fmt(jobs.length)}</div></div>
+            <div className="card"><div className="text-sm text-gray-500">Заводских заказов за 60 дней</div><div className="text-2xl font-bold mt-1">{fmt(jobs.length)}</div></div>
             <div className="card"><div className="text-sm text-gray-500">Опубликовано</div><div className="text-2xl font-bold mt-1">{fmt(jobs.filter((j) => j.event === "опубликован").length)}</div></div>
             <div className="card"><div className="text-sm text-gray-500">Брак (не принят + ошибка)</div><div className="text-2xl font-bold mt-1">{fmt(jobs.filter((j) => ["не принят", "брак", "ошибка"].includes(j.event)).length)}</div></div>
             <div className="card"><div className="text-sm text-gray-500">Смета за 60 дней</div><div className="text-2xl font-bold mt-1">{totalCost ? `$${totalCost.toFixed(2)}` : "—"}</div>
@@ -219,6 +221,47 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {manual && (
+            <div className="card">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="font-semibold">✍️ Ручная публикация</h2>
+                <span className="text-xs text-gray-400">посты без участия завода · 60 дней</span>
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5 mb-3">
+                Всё, чего нет в журнале завода: выложено из бота или прямо из Instagram.
+              </p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                <div><div className="text-sm text-gray-500">Постов руками</div><div className="text-2xl font-bold mt-1">{fmt(manual.total)}</div></div>
+                <div><div className="text-sm text-gray-500">Из них видео</div><div className="text-2xl font-bold mt-1">{fmt(manual.video)}</div></div>
+                <div><div className="text-sm text-gray-500">Просмотров</div><div className="text-2xl font-bold mt-1">{fmt(manual.views)}</div></div>
+                <div><div className="text-sm text-gray-500">Зеркалировано</div>
+                  <div className="text-2xl font-bold mt-1">{fmt(manual.mirroredYoutube)} / {fmt(manual.mirroredTiktok)}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">Ютуб / ТикТок</div></div>
+              </div>
+              {manual.accounts?.length > 0 && (
+                <table className="w-full text-sm">
+                  <thead><tr className="text-left text-gray-500">
+                    <th className="py-1 pr-4">Аккаунт</th><th className="py-1 pr-4">Постов</th>
+                    <th className="py-1 pr-4">Видео</th><th className="py-1 pr-4">Просмотры</th>
+                    <th className="py-1 pr-4">Лайки</th><th className="py-1">На Ютубе / ТикТоке</th>
+                  </tr></thead>
+                  <tbody>
+                    {manual.accounts.map((a: any) => (
+                      <tr key={a.account} className="border-t">
+                        <td className="py-1.5 pr-4 font-medium">@{a.account}</td>
+                        <td className="py-1.5 pr-4">{a.total}</td>
+                        <td className="py-1.5 pr-4">{a.video}</td>
+                        <td className="py-1.5 pr-4">{fmt(a.views)}</td>
+                        <td className="py-1.5 pr-4">{fmt(a.likes)}</td>
+                        <td className="py-1.5">{a.youtube} / {a.tiktok}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           )}
 
