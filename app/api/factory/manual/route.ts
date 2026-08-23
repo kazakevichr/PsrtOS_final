@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { brandFor } from "@/lib/insta";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export async function GET(req: Request) {
       if (factoryLinks.has(norm(m.permalink))) continue;
       rows.push({
         account: acc.username,
+        brand: brandFor(acc.username),
         type: String(m.type || "").toUpperCase(),
         video: VIDEO.includes(String(m.type || "").toUpperCase()),
         views: m.views ?? 0,
@@ -54,7 +56,7 @@ export async function GET(req: Request) {
   const byAccount: Record<string, any> = {};
   for (const r of rows) {
     const a = (byAccount[r.account] ||= {
-      account: r.account, total: 0, video: 0, views: 0, likes: 0, youtube: 0, tiktok: 0,
+      account: r.account, brand: r.brand, total: 0, video: 0, views: 0, likes: 0, youtube: 0, tiktok: 0,
     });
     a.total++;
     if (r.video) a.video++;

@@ -7,18 +7,24 @@ import RouteMatrix from "@/components/RouteMatrix";
 
 const fmt = (n: any) => (n == null ? "—" : Number(n).toLocaleString("ru-RU"));
 
-// Подсказка: наведение объясняет, откуда взялась цифра. Без неё таблицы
-// читаются как «магические числа» — приходится верить на слово.
+// Подсказка: своя всплывашка, а не системный title — тот появляется
+// с задержкой и на части браузеров просто не показывается.
 function Hint({ text }: { text: string }) {
   return (
-    <span
-      title={text}
-      className="inline-flex items-center justify-center w-4 h-4 ml-1 align-middle rounded-full border border-gray-300 text-[10px] text-gray-400 cursor-help select-none"
-    >
-      ?
+    <span className="relative inline-flex group align-middle ml-1">
+      <span className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-gray-300 text-[10px] text-gray-400 cursor-help select-none">
+        ?
+      </span>
+      <span className="hidden group-hover:block absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 w-64 z-20 bg-gray-900 text-white text-xs leading-snug rounded-lg px-3 py-2 shadow-lg font-normal normal-case text-left">
+        {text}
+      </span>
     </span>
   );
 }
+
+const BRAND_NAMES: Record<string, string> = {
+  superfit: "СуперФит", party: "Вечеринки", oracle: "Оракл", other: "Прочее",
+};
 
 const EVENT_BADGE: Record<string, string> = {
   "опубликован": "bg-green-100 text-green-800",
@@ -44,6 +50,7 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
   const [note, setNote] = useState("");
   const [onlyDefects, setOnlyDefects] = useState(false);
   const [manual, setManual] = useState<any>(null);
+  const [mBrand, setMBrand] = useState("all");
 
   async function loadPlan(m: string) {
     const r = await fetch(`/api/factory/plan-admin?month=${m}`);
@@ -246,15 +253,58 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
               <p className="text-xs text-gray-400 mt-0.5 mb-3">
                 Всё, чего нет в журнале завода: выложено из бота или прямо из Instagram.
               </p>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                <div><div className="text-sm text-gray-500">Постов руками<Hint text="Все публикации во всех отслеживаемых аккаунтах за 60 дней, которых нет в журнале завода: выложенные кнопкой в боте или прямо из приложения Instagram." /></div><div className="text-2xl font-bold mt-1">{fmt(manual.total)}</div></div>
-                <div><div className="text-sm text-gray-500">Из них видео<Hint text="Сколько из ручных постов — рилсы и видео. Важно потому, что на YouTube и в TikTok зеркалируются только видео: карусели и фото туда не уходят." /></div><div className="text-2xl font-bold mt-1">{fmt(manual.video)}</div></div>
-                <div><div className="text-sm text-gray-500">Просмотров<Hint text="Сумма просмотров ручных постов по данным Instagram на момент последнего сбора (он идёт каждые 20 минут)." /></div><div className="text-2xl font-bold mt-1">{fmt(manual.views)}</div></div>
-                <div><div className="text-sm text-gray-500">Зеркалировано<Hint text="Сколько ручных постов уже перезалито на YouTube и в TikTok. Считается по отметкам зеркалирования: каждый уехавший ролик отмечается, чтобы не публиковать его дважды. Разница с числом видео — то, что ещё в очереди или не уехало (лимит загрузок, отсутствие файла)." /></div>
-                  <div className="text-2xl font-bold mt-1">{fmt(manual.mirroredYoutube)} / {fmt(manual.mirroredTiktok)}</div>
-                  <div className="text-xs text-gray-400 mt-0.5">Ютуб / ТикТок</div></div>
+              <div className="flex flex-wrap gap-1 mb-4">
+                {["all", ...new Set((manual.accounts || []).map((a: any) => a.brand))].map((b: any) => (
+                  <button
+                    key={b}
+                    onClick={() => setMBrand(b)}
+                    className={`px-2.5 py-1 rounded-lg text-xs ${mBrand === b ? "bg-brand-600 text-white" : "bg-white border hover:bg-gray-50"}`}
+                  >
+                    {b === "all" ? "Все проекты" : BRAND_NAMES[b] || b}
+                  </button>
+                ))}
               </div>
-              {manual.accounts?.length > 0 && (
+              {(() => {
+                const rows = (manual.accounts || []).filter((a: any) => mBrand === "all" || a.brand === mBrand);
+                const sum = (f: string) => rows.reduce((s: number, a: any) => s + (a[f] || 0), 0);
+                return (
+                  <>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                      <div><div className="text-sm text-gray-500">Постов руками<Hint text="Публикации в отслеживаемых аккаунтах за 60 дней, которых нет в журнале завода: выложены кнопкой в боте или прямо из приложения Instagram." /></div>
+                        <div className="text-2xl font-bold mt-1">{fmt(sum("total"))}</div></div>
+                      <div><div className="text-sm text-gray-500">Из них видео<Hint text="Сколько из ручных постов — рилсы и видео. Важно потому, что на YouTube и в TikTok зеркалируются только видео: карусели и фото туда не уходят." /></div>
+                        <div className="text-2xl font-bold mt-1">{fmt(sum("video"))}</div></div>
+                      <div><div className="text-sm text-gray-500">Уехало на Ютуб<Hint text="Сколько ручных видео уже перезалито на YouTube. Считается по отметкам зеркалирования — каждый уехавший ролик отмечается, чтобы не публиковать его дважды. Меньше числа видео потому, что зеркалирование берёт только свежие посты и упирается в суточный лимит загрузок YouTube." /></div>
+                        <div className="text-2xl font-bold mt-1">{fmt(sum("youtube"))}</div></div>
+                      <div><div className="text-sm text-gray-500">Уехало в ТикТок<Hint text="Сколько ручных видео уже отправлено в TikTok. До прохождения аудита приложения ролик приезжает во «Входящие» аккаунта и публикуется твоим нажатием — отметка ставится в момент отправки." /></div>
+                        <div className="text-2xl font-bold mt-1">{fmt(sum("tiktok"))}</div></div>
+                    </div>
+                    {rows.length > 0 && (
+                      <table className="w-full text-sm">
+                        <thead><tr className="text-left text-gray-500">
+                          <th className="py-1 pr-4">Аккаунт</th>
+                          <th className="py-1 pr-4">Постов</th>
+                          <th className="py-1 pr-4">Видео</th>
+                          <th className="py-1 pr-4">На Ютубе<Hint text="Ручные видео этого аккаунта, уже уехавшие на YouTube-канал." /></th>
+                          <th className="py-1">В ТикТоке<Hint text="Ручные видео этого аккаунта, отправленные в TikTok. Ноль там, где зеркалирование для аккаунта не настроено — маршруты на вкладке «Контент-план»." /></th>
+                        </tr></thead>
+                        <tbody>
+                          {rows.map((a: any) => (
+                            <tr key={a.account} className="border-t">
+                              <td className="py-1.5 pr-4 font-medium">@{a.account}</td>
+                              <td className="py-1.5 pr-4">{a.total}</td>
+                              <td className="py-1.5 pr-4">{a.video}</td>
+                              <td className="py-1.5 pr-4">{a.youtube}</td>
+                              <td className="py-1.5">{a.tiktok}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </>
+                );
+              })()}
+              {false && manual.accounts?.length > 0 && (
                 <table className="w-full text-sm">
                   <thead><tr className="text-left text-gray-500">
                     <th className="py-1 pr-4">Аккаунт</th><th className="py-1 pr-4">Постов</th>
