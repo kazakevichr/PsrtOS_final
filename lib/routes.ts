@@ -13,6 +13,7 @@ export const KINDS = [
   { kind: "carousel", label: "Карусель", note: "12:02" },
   { kind: "avatar", label: "ИИ-аватар", note: "по запросу" },
   { kind: "trainer:female", label: "Тренер Ж", note: "заморожен" },
+  { kind: "trainer:male", label: "Тренер М", note: "заморожен" },
   { kind: "repost", label: "Нарезки", note: "ютуб-репост" },
   { kind: "manual", label: "Ручные из бота", note: "" },
 ];
@@ -34,6 +35,7 @@ const DEFAULTS: Record<string, Record<string, boolean>> = {
   carousel: { ig_main: true, ig_woman: false },
   avatar: { ig_main: true, ig_woman: false, youtube: true, tiktok: false },
   "trainer:female": { ig_main: false, ig_woman: false, youtube: false, tiktok: false },
+  "trainer:male": { ig_main: false, ig_woman: false, youtube: false, tiktok: false },
   repost: { ig_main: false, ig_woman: true },
   manual: { ig_main: true, youtube: true, tiktok: true },
 };
