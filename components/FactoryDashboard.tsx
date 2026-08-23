@@ -51,23 +51,25 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
   const [onlyDefects, setOnlyDefects] = useState(false);
   const [manual, setManual] = useState<any>(null);
   const [mBrand, setMBrand] = useState("all");
+  const [days, setDays] = useState(30);
 
   async function loadPlan(m: string) {
     const r = await fetch(`/api/factory/plan-admin?month=${m}`);
     setPlan(await r.json());
   }
-  async function loadJobs() {
-    const r = await fetch("/api/factory/jobs?days=60");
+  async function loadJobs(d = days) {
+    const r = await fetch(`/api/factory/jobs?days=${d}`);
     const j = await r.json();
     setJobs(j.jobs || []);
   }
   useEffect(() => {
     loadPlan(month);
   }, [month]);
+  // Период общий для заводской и ручной статистики — как в «Соц.Сетях».
   useEffect(() => {
-    loadJobs();
-    fetch("/api/factory/manual?days=60").then((r) => r.json()).then(setManual).catch(() => {});
-  }, []);
+    loadJobs(days);
+    fetch(`/api/factory/manual?days=${days}`).then((r) => r.json()).then(setManual).catch(() => {});
+  }, [days]);
 
   const cell = (date: string, slot: string) =>
     (plan?.plan || []).find((r: any) => r.date === date && r.slot === slot);
@@ -140,7 +142,20 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
           <h1 className="text-xl font-bold mb-1">Контент-завод</h1>
           <p className="text-sm text-gray-500">План тем и статистика производства СуперФита</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          {tab === "stats" && (
+            <div className="flex gap-1 bg-white border rounded-lg p-0.5 mr-1">
+              {[7, 14, 30, 90].map((d) => (
+                <button
+                  key={d}
+                  onClick={() => setDays(d)}
+                  className={`px-2.5 py-1 rounded-md text-sm ${days === d ? "bg-brand-600 text-white" : "hover:bg-gray-50"}`}
+                >
+                  {d} дн
+                </button>
+              ))}
+            </div>
+          )}
           <button className={`px-3 py-1.5 rounded-lg text-sm ${tab === "plan" ? "bg-brand-600 text-white" : "bg-white border hover:bg-gray-50"}`} onClick={() => setTab("plan")}>
             Контент-план
           </button>
@@ -211,21 +226,21 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
       {tab === "stats" && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="card"><div className="text-sm text-gray-500">Заводских заказов за 60 дней<Hint text="Сколько единиц контента завод взял в работу за 60 дней. Один заказ — один ролик или карусель; считается по журналу завода, куда он пишет каждый этап производства." /></div><div className="text-2xl font-bold mt-1">{fmt(jobs.length)}</div></div>
+            <div className="card"><div className="text-sm text-gray-500">Заводских заказов за {days} дн<Hint text="Сколько единиц контента завод взял в работу за выбранный период. Один заказ — один ролик или карусель; считается по журналу завода, куда он пишет каждый этап производства." /></div><div className="text-2xl font-bold mt-1">{fmt(jobs.length)}</div></div>
             <div className="card"><div className="text-sm text-gray-500">Опубликовано<Hint text="Заказы, дошедшие до публикации: завод прислал событие «опубликован» со ссылкой на пост. Заказы в работе и забракованные сюда не входят." /></div><div className="text-2xl font-bold mt-1">{fmt(jobs.filter((j) => j.event === "опубликован").length)}</div></div>
             <div className="card"><div className="text-sm text-gray-500">Брак (не принят + ошибка)<Hint text="Сумма трёх исходов: «не принят» — ты забраковал до публикации, «брак» — забраковал уже вышедший пост, «ошибка» — производство упало само. Комментарий к браку уходит заводу и учитывается в следующих выпусках." /></div><div className="text-2xl font-bold mt-1">{fmt(jobs.filter((j) => ["не принят", "брак", "ошибка"].includes(j.event)).length)}</div></div>
-            <div className="card"><div className="text-sm text-gray-500">Смета за 60 дней<Hint text="Сумма стоимости всех заказов за 60 дней: завод считает расход на нейросети по каждому ролику (озвучка, генерация, монтаж) и присылает вместе с событием «готов»." /></div><div className="text-2xl font-bold mt-1">{totalCost ? `$${totalCost.toFixed(2)}` : "—"}</div>
+            <div className="card"><div className="text-sm text-gray-500">Смета за {days} дн<Hint text="Сумма стоимости всех заказов за выбранный период: завод считает расход на нейросети по каждому ролику (озвучка, генерация, монтаж) и присылает вместе с событием «готов»." /></div><div className="text-2xl font-bold mt-1">{totalCost ? `$${totalCost.toFixed(2)}` : "—"}</div>
               {!totalCost && <div className="text-xs text-gray-400 mt-1">завод пока не сообщает стоимость</div>}</div>
           </div>
 
           {stats.length > 0 && (
             <div className="card overflow-x-auto">
-              <h2 className="font-semibold mb-3">По типам контента<Hint text="Разрез заводских заказов по типу: make — Персонаж, carousel — Карусель, avatar — ИИ-аватар по запросу, trainer — тренерские клипы. Все эти типы производит завод; ручные публикации сюда не попадают." /></h2>
+              <h2 className="font-semibold mb-3">По типам контента<Hint text="Разрез заводских заказов за выбранный период по типу: make — Персонаж, carousel — Карусель, avatar — ИИ-аватар по запросу, trainer — тренерские клипы. Все эти типы производит завод; ручные публикации сюда не попадают." /></h2>
               <table className="w-full text-sm">
                 <thead><tr className="text-left text-gray-500">
                   <th className="py-1 pr-4">Тип</th><th className="py-1 pr-4">Всего</th>
                   <th className="py-1 pr-4">Опубликовано</th><th className="py-1 pr-4">Не принято</th>
-                  <th className="py-1 pr-4">Ошибки<Hint text="Производство упало с ошибкой — до публикации дело не дошло." /></th><th className="py-1 pr-4">Ср. время<Hint text="Среднее время производства одного ролика: от старта до готовности, по тем заказам, где завод прислал длительность." /></th><th className="py-1">Стоимость<Hint text="Суммарный расход на нейросети по этому типу за 60 дней." /></th>
+                  <th className="py-1 pr-4">Ошибки<Hint text="Производство упало с ошибкой — до публикации дело не дошло." /></th><th className="py-1 pr-4">Ср. время<Hint text="Среднее время производства одного ролика: от старта до готовности, по тем заказам, где завод прислал длительность." /></th><th className="py-1">Стоимость<Hint text="Суммарный расход на нейросети по этому типу за выбранный период." /></th>
                 </tr></thead>
                 <tbody>
                   {stats.map((s: any) => (
@@ -248,7 +263,7 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
             <div className="card">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h2 className="font-semibold">✍️ Ручная публикация<Hint text="Посты, которых нет в журнале завода. Сверка идёт по ссылке на пост: завод присылает permalink каждой своей публикации, поэтому если пост в Instagram есть, а в журнале его нет — значит выложен руками. Работает даже когда ручной пост уходит в тот же аккаунт, где постит завод." /></h2>
-                <span className="text-xs text-gray-400">посты без участия завода · 60 дней</span>
+                <span className="text-xs text-gray-400">посты без участия завода · {days} дн</span>
               </div>
               <p className="text-xs text-gray-400 mt-0.5 mb-3">
                 Всё, чего нет в журнале завода: выложено из бота или прямо из Instagram.
@@ -270,7 +285,7 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
                 return (
                   <>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                      <div><div className="text-sm text-gray-500">Постов руками<Hint text="Публикации в отслеживаемых аккаунтах за 60 дней, которых нет в журнале завода: выложены кнопкой в боте или прямо из приложения Instagram." /></div>
+                      <div><div className="text-sm text-gray-500">Постов руками<Hint text="Публикации в отслеживаемых аккаунтах за выбранный период, которых нет в журнале завода: выложены кнопкой в боте или прямо из приложения Instagram." /></div>
                         <div className="text-2xl font-bold mt-1">{fmt(sum("total"))}</div></div>
                       <div><div className="text-sm text-gray-500">Из них видео<Hint text="Сколько из ручных постов — рилсы и видео. Важно потому, что на YouTube и в TikTok зеркалируются только видео: карусели и фото туда не уходят." /></div>
                         <div className="text-2xl font-bold mt-1">{fmt(sum("video"))}</div></div>
