@@ -7,6 +7,19 @@ import RouteMatrix from "@/components/RouteMatrix";
 
 const fmt = (n: any) => (n == null ? "—" : Number(n).toLocaleString("ru-RU"));
 
+// Подсказка: наведение объясняет, откуда взялась цифра. Без неё таблицы
+// читаются как «магические числа» — приходится верить на слово.
+function Hint({ text }: { text: string }) {
+  return (
+    <span
+      title={text}
+      className="inline-flex items-center justify-center w-4 h-4 ml-1 align-middle rounded-full border border-gray-300 text-[10px] text-gray-400 cursor-help select-none"
+    >
+      ?
+    </span>
+  );
+}
+
 const EVENT_BADGE: Record<string, string> = {
   "опубликован": "bg-green-100 text-green-800",
   "готов": "bg-blue-100 text-blue-800",
@@ -191,21 +204,21 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
       {tab === "stats" && (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="card"><div className="text-sm text-gray-500">Заводских заказов за 60 дней</div><div className="text-2xl font-bold mt-1">{fmt(jobs.length)}</div></div>
-            <div className="card"><div className="text-sm text-gray-500">Опубликовано</div><div className="text-2xl font-bold mt-1">{fmt(jobs.filter((j) => j.event === "опубликован").length)}</div></div>
-            <div className="card"><div className="text-sm text-gray-500">Брак (не принят + ошибка)</div><div className="text-2xl font-bold mt-1">{fmt(jobs.filter((j) => ["не принят", "брак", "ошибка"].includes(j.event)).length)}</div></div>
-            <div className="card"><div className="text-sm text-gray-500">Смета за 60 дней</div><div className="text-2xl font-bold mt-1">{totalCost ? `$${totalCost.toFixed(2)}` : "—"}</div>
+            <div className="card"><div className="text-sm text-gray-500">Заводских заказов за 60 дней<Hint text="Сколько единиц контента завод взял в работу за 60 дней. Один заказ — один ролик или карусель; считается по журналу завода, куда он пишет каждый этап производства." /></div><div className="text-2xl font-bold mt-1">{fmt(jobs.length)}</div></div>
+            <div className="card"><div className="text-sm text-gray-500">Опубликовано<Hint text="Заказы, дошедшие до публикации: завод прислал событие «опубликован» со ссылкой на пост. Заказы в работе и забракованные сюда не входят." /></div><div className="text-2xl font-bold mt-1">{fmt(jobs.filter((j) => j.event === "опубликован").length)}</div></div>
+            <div className="card"><div className="text-sm text-gray-500">Брак (не принят + ошибка)<Hint text="Сумма трёх исходов: «не принят» — ты забраковал до публикации, «брак» — забраковал уже вышедший пост, «ошибка» — производство упало само. Комментарий к браку уходит заводу и учитывается в следующих выпусках." /></div><div className="text-2xl font-bold mt-1">{fmt(jobs.filter((j) => ["не принят", "брак", "ошибка"].includes(j.event)).length)}</div></div>
+            <div className="card"><div className="text-sm text-gray-500">Смета за 60 дней<Hint text="Сумма стоимости всех заказов за 60 дней: завод считает расход на нейросети по каждому ролику (озвучка, генерация, монтаж) и присылает вместе с событием «готов»." /></div><div className="text-2xl font-bold mt-1">{totalCost ? `$${totalCost.toFixed(2)}` : "—"}</div>
               {!totalCost && <div className="text-xs text-gray-400 mt-1">завод пока не сообщает стоимость</div>}</div>
           </div>
 
           {stats.length > 0 && (
             <div className="card overflow-x-auto">
-              <h2 className="font-semibold mb-3">По типам контента</h2>
+              <h2 className="font-semibold mb-3">По типам контента<Hint text="Разрез заводских заказов по типу: make — Персонаж, carousel — Карусель, avatar — ИИ-аватар по запросу, trainer — тренерские клипы. Все эти типы производит завод; ручные публикации сюда не попадают." /></h2>
               <table className="w-full text-sm">
                 <thead><tr className="text-left text-gray-500">
                   <th className="py-1 pr-4">Тип</th><th className="py-1 pr-4">Всего</th>
                   <th className="py-1 pr-4">Опубликовано</th><th className="py-1 pr-4">Не принято</th>
-                  <th className="py-1 pr-4">Ошибки</th><th className="py-1 pr-4">Ср. время</th><th className="py-1">Стоимость</th>
+                  <th className="py-1 pr-4">Ошибки<Hint text="Производство упало с ошибкой — до публикации дело не дошло." /></th><th className="py-1 pr-4">Ср. время<Hint text="Среднее время производства одного ролика: от старта до готовности, по тем заказам, где завод прислал длительность." /></th><th className="py-1">Стоимость<Hint text="Суммарный расход на нейросети по этому типу за 60 дней." /></th>
                 </tr></thead>
                 <tbody>
                   {stats.map((s: any) => (
@@ -227,17 +240,17 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
           {manual && (
             <div className="card">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-semibold">✍️ Ручная публикация</h2>
+                <h2 className="font-semibold">✍️ Ручная публикация<Hint text="Посты, которых нет в журнале завода. Сверка идёт по ссылке на пост: завод присылает permalink каждой своей публикации, поэтому если пост в Instagram есть, а в журнале его нет — значит выложен руками. Работает даже когда ручной пост уходит в тот же аккаунт, где постит завод." /></h2>
                 <span className="text-xs text-gray-400">посты без участия завода · 60 дней</span>
               </div>
               <p className="text-xs text-gray-400 mt-0.5 mb-3">
                 Всё, чего нет в журнале завода: выложено из бота или прямо из Instagram.
               </p>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                <div><div className="text-sm text-gray-500">Постов руками</div><div className="text-2xl font-bold mt-1">{fmt(manual.total)}</div></div>
-                <div><div className="text-sm text-gray-500">Из них видео</div><div className="text-2xl font-bold mt-1">{fmt(manual.video)}</div></div>
-                <div><div className="text-sm text-gray-500">Просмотров</div><div className="text-2xl font-bold mt-1">{fmt(manual.views)}</div></div>
-                <div><div className="text-sm text-gray-500">Зеркалировано</div>
+                <div><div className="text-sm text-gray-500">Постов руками<Hint text="Все публикации во всех отслеживаемых аккаунтах за 60 дней, которых нет в журнале завода: выложенные кнопкой в боте или прямо из приложения Instagram." /></div><div className="text-2xl font-bold mt-1">{fmt(manual.total)}</div></div>
+                <div><div className="text-sm text-gray-500">Из них видео<Hint text="Сколько из ручных постов — рилсы и видео. Важно потому, что на YouTube и в TikTok зеркалируются только видео: карусели и фото туда не уходят." /></div><div className="text-2xl font-bold mt-1">{fmt(manual.video)}</div></div>
+                <div><div className="text-sm text-gray-500">Просмотров<Hint text="Сумма просмотров ручных постов по данным Instagram на момент последнего сбора (он идёт каждые 20 минут)." /></div><div className="text-2xl font-bold mt-1">{fmt(manual.views)}</div></div>
+                <div><div className="text-sm text-gray-500">Зеркалировано<Hint text="Сколько ручных постов уже перезалито на YouTube и в TikTok. Считается по отметкам зеркалирования: каждый уехавший ролик отмечается, чтобы не публиковать его дважды. Разница с числом видео — то, что ещё в очереди или не уехало (лимит загрузок, отсутствие файла)." /></div>
                   <div className="text-2xl font-bold mt-1">{fmt(manual.mirroredYoutube)} / {fmt(manual.mirroredTiktok)}</div>
                   <div className="text-xs text-gray-400 mt-0.5">Ютуб / ТикТок</div></div>
               </div>
@@ -246,7 +259,7 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
                   <thead><tr className="text-left text-gray-500">
                     <th className="py-1 pr-4">Аккаунт</th><th className="py-1 pr-4">Постов</th>
                     <th className="py-1 pr-4">Видео</th><th className="py-1 pr-4">Просмотры</th>
-                    <th className="py-1 pr-4">Лайки</th><th className="py-1">На Ютубе / ТикТоке</th>
+                    <th className="py-1 pr-4">Лайки</th><th className="py-1">На Ютубе / ТикТоке<Hint text="Сколько ручных постов этого аккаунта уже уехало на YouTube и в TikTok. Ноль там, где зеркалирование для аккаунта не включено — маршруты настраиваются на вкладке «Контент-план»." /></th>
                   </tr></thead>
                   <tbody>
                     {manual.accounts.map((a: any) => (
