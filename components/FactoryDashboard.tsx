@@ -3,6 +3,7 @@
 // Контент-завод: план тем (месячная сетка, редактируется на месте, генерация
 // тем LLM) и статистика производства из журнала событий завода.
 import { useEffect, useMemo, useState } from "react";
+import RouteMatrix from "@/components/RouteMatrix";
 
 const fmt = (n: any) => (n == null ? "—" : Number(n).toLocaleString("ru-RU"));
 
@@ -127,6 +128,8 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
         </div>
       </div>
       {note && <p className="text-sm text-gray-500">{note}</p>}
+
+      {tab === "plan" && <RouteMatrix canManage={canManage} />}
 
       {tab === "plan" && plan && (
         <div className="card overflow-x-auto">

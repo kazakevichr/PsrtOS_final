@@ -280,3 +280,16 @@ model MirrorLog {
 
   @@unique([platform, permalink])
 }
+
+// Маршруты публикации: что и куда уходит. Источник правды для завода и
+// зеркалирования — выключенное не публикуется ни автопланом, ни кнопкой.
+// kind="*" — рубильник площадки целиком.
+model RouteFlag {
+  id       Int      @id @default(autoincrement())
+  platform String
+  kind     String
+  enabled  Boolean  @default(true)
+  at       DateTime @updatedAt
+
+  @@unique([platform, kind])
+}
