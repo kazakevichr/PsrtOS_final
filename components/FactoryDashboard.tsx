@@ -304,27 +304,6 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
                   </>
                 );
               })()}
-              {false && manual.accounts?.length > 0 && (
-                <table className="w-full text-sm">
-                  <thead><tr className="text-left text-gray-500">
-                    <th className="py-1 pr-4">Аккаунт</th><th className="py-1 pr-4">Постов</th>
-                    <th className="py-1 pr-4">Видео</th><th className="py-1 pr-4">Просмотры</th>
-                    <th className="py-1 pr-4">Лайки</th><th className="py-1">На Ютубе / ТикТоке<Hint text="Сколько ручных постов этого аккаунта уже уехало на YouTube и в TikTok. Ноль там, где зеркалирование для аккаунта не включено — маршруты настраиваются на вкладке «Контент-план»." /></th>
-                  </tr></thead>
-                  <tbody>
-                    {manual.accounts.map((a: any) => (
-                      <tr key={a.account} className="border-t">
-                        <td className="py-1.5 pr-4 font-medium">@{a.account}</td>
-                        <td className="py-1.5 pr-4">{a.total}</td>
-                        <td className="py-1.5 pr-4">{a.video}</td>
-                        <td className="py-1.5 pr-4">{fmt(a.views)}</td>
-                        <td className="py-1.5 pr-4">{fmt(a.likes)}</td>
-                        <td className="py-1.5">{a.youtube} / {a.tiktok}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
             </div>
           )}
 
