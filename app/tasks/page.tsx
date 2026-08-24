@@ -30,6 +30,8 @@ export default async function TasksPage() {
     title: t.title,
     dueDate: t.dueDate ? t.dueDate.toISOString() : null,
     isDone: t.isDone,
+    isAuto: t.isAuto,
+    source: t.source,
     assignedTo: { name: t.assignedTo.name },
     partner: t.partner ? { id: t.partner.id, name: t.partner.name } : null,
   }));

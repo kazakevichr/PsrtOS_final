@@ -7,6 +7,8 @@ type Task = {
   title: string;
   dueDate: string | null;
   isDone: boolean;
+  isAuto?: boolean;
+  source?: string | null;
   assignedTo: { name: string };
   partner: { id: string; name: string } | null;
 };
@@ -15,6 +17,8 @@ export default function TaskList({ tasks }: { tasks: Task[] }) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
 
   async function toggle(id: string, isDone: boolean) {
     await fetch(`/api/tasks/${id}`, {
@@ -22,6 +26,27 @@ export default function TaskList({ tasks }: { tasks: Task[] }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ isDone: !isDone }),
     });
+    router.refresh();
+  }
+
+  async function remove(id: string) {
+    await fetch(`/api/tasks/${id}`, { method: "DELETE" });
+    router.refresh();
+  }
+
+  // Пакетная уборка: авто-задачи по остывающим партнёрам плодятся сами, и
+  // вычищать их по одной — мучение.
+  async function bulk(what: string, question: string) {
+    if (!window.confirm(question)) return;
+    setBusy(true);
+    const r = await fetch("/api/tasks/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ what }),
+    });
+    const j = await r.json();
+    setNote(j.error ? j.error : `Удалено задач: ${j.deleted}`);
+    setBusy(false);
     router.refresh();
   }
 
@@ -55,6 +80,21 @@ export default function TaskList({ tasks }: { tasks: Task[] }) {
       </form>
 
       <div className="card">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <button className="btn text-xs" disabled={busy}
+            onClick={() => bulk("done", "Удалить все выполненные задачи?")}>
+            Убрать выполненные
+          </button>
+          <button className="btn text-xs" disabled={busy}
+            onClick={() => bulk("overdue-auto", "Удалить просроченные авто-напоминания по партнёрам? Новые появятся, пока партнёры остаются без активности.")}>
+            Убрать просроченные авто-напоминания
+          </button>
+          <button className="btn text-xs" disabled={busy}
+            onClick={() => bulk("auto", "Удалить ВСЕ авто-напоминания по партнёрам? Они создаются заново при заходе на страницу, пока партнёр без активности.")}>
+            Убрать все авто-напоминания
+          </button>
+          {note && <span className="text-xs text-gray-500">{note}</span>}
+        </div>
         <div className="space-y-1">
           {tasks.length === 0 && <p className="text-sm text-gray-400">Задач нет.</p>}
           {tasks.map((t) => (
@@ -71,6 +111,13 @@ export default function TaskList({ tasks }: { tasks: Task[] }) {
               </span>
               <span className="text-gray-400">{t.assignedTo.name}</span>
               {t.dueDate && <span>{new Date(t.dueDate).toLocaleDateString("ru-RU")}</span>}
+              <button
+                title="Удалить задачу"
+                onClick={(e) => { e.preventDefault(); remove(t.id); }}
+                className="text-gray-300 hover:text-red-600 px-1"
+              >
+                ✕
+              </button>
             </label>
           ))}
         </div>
