@@ -107,18 +107,25 @@ async function discoverAccounts(token: string, errors: string[] = []) {
 // не валит сбор
 async function accountInsights(igId: string, token: string) {
   const out: Record<string, number | null> = {};
-  try {
-    const r = await gget(`${igId}/insights`, { metric: "reach", period: "day" }, token);
-    out.reach = r.data?.[0]?.values?.at(-1)?.value ?? null;
-  } catch {}
+  // Все метрики одним разрезом — total_value за сутки. Раньше охват брался
+  // без metric_type: тот запрос отдаёт ряд ЗАВЕРШЁННЫХ суток по часовому поясу
+  // аккаунта, и последнее значение относилось к позавчера, а писалось под
+  // сегодняшнюю дату — охват выходил сдвинутым и занижённым втрое.
   try {
     const r = await gget(`${igId}/insights`, {
-      metric: "views,profile_views,accounts_engaged",
+      metric: "views,reach,profile_views,accounts_engaged",
       metric_type: "total_value",
       period: "day",
     }, token);
     for (const m of r.data || []) out[m.name] = m.total_value?.value ?? null;
   } catch {}
+  if (out.reach == null) {
+    // Запасной путь, если total_value недоступен для аккаунта.
+    try {
+      const r = await gget(`${igId}/insights`, { metric: "reach", period: "day" }, token);
+      out.reach = r.data?.[0]?.values?.at(-1)?.value ?? null;
+    } catch {}
+  }
   return out;
 }
 
