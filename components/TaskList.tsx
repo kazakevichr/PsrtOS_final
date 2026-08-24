@@ -98,27 +98,37 @@ export default function TaskList({ tasks }: { tasks: Task[] }) {
         <div className="space-y-1">
           {tasks.length === 0 && <p className="text-sm text-gray-400">Задач нет.</p>}
           {tasks.map((t) => (
-            <label
+            // Строка — div, а не label: когда весь ряд был подписью чекбокса,
+            // клик по крестику перехватывался чекбоксом и удаление не срабатывало.
+            <div
               key={t.id}
               className={`flex items-center gap-3 py-2 border-b last:border-0 text-sm ${
                 t.isDone ? "text-gray-400 line-through" : isOverdue(t) ? "text-red-600" : ""
               }`}
             >
-              <input type="checkbox" checked={t.isDone} onChange={() => toggle(t.id, t.isDone)} />
+              <input
+                type="checkbox"
+                className="cursor-pointer"
+                checked={t.isDone}
+                onChange={() => toggle(t.id, t.isDone)}
+              />
               <span className="flex-1">
                 {t.title}
                 {t.partner && <span className="text-gray-400"> · партнёр: {t.partner.name}</span>}
+                {t.source && <span className="text-gray-400"> · {t.source}</span>}
               </span>
               <span className="text-gray-400">{t.assignedTo.name}</span>
               {t.dueDate && <span>{new Date(t.dueDate).toLocaleDateString("ru-RU")}</span>}
               <button
+                type="button"
                 title="Удалить задачу"
-                onClick={(e) => { e.preventDefault(); remove(t.id); }}
+                aria-label="Удалить задачу"
+                onClick={() => remove(t.id)}
                 className="text-gray-300 hover:text-red-600 px-1"
               >
                 ✕
               </button>
-            </label>
+            </div>
           ))}
         </div>
       </div>
