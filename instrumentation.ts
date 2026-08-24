@@ -35,6 +35,9 @@ export async function register() {
 
   // Контроль задач: утром в 09:xx МСК напоминаем исполнителям про дедлайны
   // сегодня и просрочку; просроченное дублируем владельцу.
+  // Контроль задач: утром в 09:xx МСК напоминания исполнителям и сводка
+  // просрочки владельцу. Через HTTP к самому себе — lib/telegram тянет
+  // node:crypto и ломает edge-сборку при прямом импорте.
   const remind = async () => {
     const mskHour = Number(new Intl.DateTimeFormat("ru-RU", {
       timeZone: "Europe/Moscow", hour: "numeric", hour12: false,
@@ -43,26 +46,12 @@ export async function register() {
     if (mskHour !== 9 || lastRemindDay === day) return;
     lastRemindDay = day;
     try {
-      const { prisma } = await import("./lib/prisma");
-      const { sendTo, ownerWithTg } = await import("./lib/telegram");
-      const endOfToday = new Date(); endOfToday.setUTCHours(23, 59, 59, 999);
-      const tasks = await prisma.task.findMany({
-        where: { isDone: false, dueDate: { lte: endOfToday } },
-        include: { assignedTo: true },
+      const r = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/tasks/remind`, {
+        method: "POST",
+        headers: { "x-factory-key": process.env.IG_HOST_KEY || "" },
       });
-      const now = new Date();
-      const overdue: string[] = [];
-      for (const t of tasks) {
-        const late = t.dueDate! < now;
-        const line = `${late ? "🔴 просрочено" : "🟡 дедлайн сегодня"}: ${t.title}`;
-        if (t.assignedTo.tgChatId) await sendTo(t.assignedTo.tgChatId, `⏰ ${line}`);
-        if (late) overdue.push(`${t.title} — ${t.assignedTo.name}`);
-      }
-      const owner = await ownerWithTg();
-      if (owner?.tgChatId && overdue.length) {
-        await sendTo(owner.tgChatId, `🔴 <b>Просроченные задачи (${overdue.length})</b>\n` + overdue.join("\n"));
-      }
-      if (tasks.length) console.log(`[задачи] напоминаний: ${tasks.length}, просрочено: ${overdue.length}`);
+      const s = await r.json();
+      console.log(`[задачи] напоминаний: ${s.reminded}, просрочено: ${s.overdue}`);
     } catch (e) {
       console.error("[задачи] напоминания упали:", e);
     }
