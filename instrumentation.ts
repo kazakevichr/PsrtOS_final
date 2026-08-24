@@ -60,9 +60,7 @@ export async function register() {
       }
       const owner = await ownerWithTg();
       if (owner?.tgChatId && overdue.length) {
-        await sendTo(owner.tgChatId, `🔴 <b>Просроченные задачи (${overdue.length})</b>
-` + overdue.join("
-"));
+        await sendTo(owner.tgChatId, `🔴 <b>Просроченные задачи (${overdue.length})</b>\n` + overdue.join("\n"));
       }
       if (tasks.length) console.log(`[задачи] напоминаний: ${tasks.length}, просрочено: ${overdue.length}`);
     } catch (e) {
