@@ -18,6 +18,22 @@ export default function RouteMatrix({ canManage = true }: { canManage?: boolean 
     load();
   }, []);
 
+  // Расписание типа: время старта производства или «по запросу».
+  async function setSchedule(kind: string, mode: string, time?: string) {
+    if (!canManage) return;
+    setBusy(`sched|${kind}`);
+    setNote("");
+    const r = await fetch("/api/factory/routes", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind, schedule: { mode, time } }),
+    });
+    const j = await r.json();
+    if (j.schedule) setData((d: any) => ({ ...d, schedule: j.schedule }));
+    else setNote(j.error || "не получилось");
+    setBusy("");
+  }
+
   async function toggle(platform: string, kind: string, next: boolean) {
     if (!canManage) return;
     setBusy(`${platform}|${kind}`);
@@ -34,7 +50,7 @@ export default function RouteMatrix({ canManage = true }: { canManage?: boolean 
   }
 
   if (!data) return null;
-  const { platforms, kinds, na, locked, flags } = data;
+  const { platforms, kinds, na, locked, flags, schedule = {}, schedulable = [] } = data;
   const off = (p: string) => flags[`${p}|*`] === false;
 
   const Switch = ({ on, dim, onClick, label }: any) => (
@@ -76,8 +92,42 @@ export default function RouteMatrix({ canManage = true }: { canManage?: boolean 
           {kinds.map((k: any) => (
             <tr key={k.kind} className="border-t">
               <td className="py-2 pr-4">
-                {k.label}
-                {k.note && <span className="text-gray-400"> · {k.note}</span>}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span>{k.label}</span>
+                  {schedulable.includes(k.kind) ? (
+                    busy === `sched|${k.kind}` ? (
+                      <span className="text-xs text-gray-400">…</span>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <select
+                          disabled={!canManage}
+                          value={schedule[k.kind]?.mode || "demand"}
+                          onChange={(e) =>
+                            setSchedule(k.kind, e.target.value,
+                              e.target.value === "time" ? schedule[k.kind]?.time || "08:00" : undefined)
+                          }
+                          className="text-xs border rounded-md px-1 py-0.5 bg-white text-gray-600"
+                        >
+                          <option value="time">по времени</option>
+                          <option value="demand">по запросу</option>
+                        </select>
+                        {(schedule[k.kind]?.mode || "demand") === "time" && (
+                          <input
+                            type="time"
+                            disabled={!canManage}
+                            defaultValue={schedule[k.kind]?.time || "08:00"}
+                            onBlur={(e) => e.target.value && e.target.value !== schedule[k.kind]?.time &&
+                              setSchedule(k.kind, "time", e.target.value)}
+                            className="text-xs border rounded-md px-1 py-0.5 bg-white text-gray-600 w-[74px]"
+                            title="Время старта производства, МСК. Завод проверяет расписание раз в час, поэтому минуты округляются к началу часа."
+                          />
+                        )}
+                      </span>
+                    )
+                  ) : (
+                    k.note && <span className="text-gray-400 text-xs">· {k.note}</span>
+                  )}
+                </div>
               </td>
               {platforms.map((p: any) => {
                 const isNa = (na[k.kind] || []).includes(p.key);

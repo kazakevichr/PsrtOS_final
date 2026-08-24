@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { KINDS, LOCKED, NA, PLATFORMS, allowed, blocked, routeMap } from "@/lib/routes";
+import { KINDS, LOCKED, NA, PLATFORMS, SCHEDULABLE, allowed, blocked, routeMap, scheduleMap, setSchedule } from "@/lib/routes";
 
 export const dynamic = "force-dynamic";
 
@@ -28,13 +28,25 @@ export async function GET(req: Request) {
     return NextResponse.json({ platform, kind, allowed: await allowed(platform, kind) });
   }
   return NextResponse.json({
-    platforms: PLATFORMS, kinds: KINDS, na: NA, locked: LOCKED, flags: await routeMap(),
+    platforms: PLATFORMS, kinds: KINDS, na: NA, locked: LOCKED,
+    schedulable: SCHEDULABLE,
+    flags: await routeMap(),
+    schedule: await scheduleMap(),
   });
 }
 
 export async function PUT(req: Request) {
   if (!(await owner())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const b = await req.json().catch(() => null);
+  // Смена расписания типа: {kind, schedule: {mode: "time"|"demand", time}}
+  if (b?.kind && b?.schedule) {
+    try {
+      await setSchedule(b.kind, b.schedule.mode, b.schedule.time);
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true, schedule: await scheduleMap() });
+  }
   if (!b?.platform || !b?.kind || typeof b.enabled !== "boolean") {
     return NextResponse.json({ error: "нужны platform, kind, enabled" }, { status: 400 });
   }

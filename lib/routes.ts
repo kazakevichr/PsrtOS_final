@@ -9,11 +9,11 @@ export const PLATFORMS = [
 ];
 
 export const KINDS = [
-  { kind: "make", label: "Персонаж", note: "08:02" },
-  { kind: "carousel", label: "Карусель", note: "12:02" },
-  { kind: "avatar", label: "ИИ-аватар", note: "по запросу" },
-  { kind: "trainer:female", label: "Тренер Ж", note: "заморожен" },
-  { kind: "trainer:male", label: "Тренер М", note: "заморожен" },
+  { kind: "make", label: "Персонаж", note: "" },
+  { kind: "carousel", label: "Карусель", note: "" },
+  { kind: "avatar", label: "ИИ-аватар", note: "" },
+  { kind: "trainer:female", label: "Тренер Ж", note: "" },
+  { kind: "trainer:male", label: "Тренер М", note: "" },
   { kind: "repost", label: "Нарезки", note: "ютуб-репост" },
   { kind: "manual", label: "Ручные из бота", note: "" },
 ];
@@ -69,4 +69,49 @@ export async function allowed(platform: string, kind: string) {
   if (blocked(platform, kind)) return false;
   const flags = await routeMap();
   return Boolean(flags[`${platform}|*`]) && Boolean(flags[`${platform}|${kind}`]);
+}
+
+// Расписание производства по типам: во сколько стартует слот или «по запросу».
+// Хранится в Setting под ключами slotmode:<kind>; завод синхронизирует своё
+// расписание с этим раз в несколько минут.
+import { prisma as _p } from "@/lib/prisma";
+
+export const SCHEDULABLE = ["make", "carousel", "avatar", "trainer:female", "trainer:male"];
+
+const SCHEDULE_DEFAULTS: Record<string, { mode: string; time?: string }> = {
+  make: { mode: "time", time: "08:00" },
+  carousel: { mode: "time", time: "12:00" },
+  avatar: { mode: "demand" },
+  "trainer:female": { mode: "demand" },
+  "trainer:male": { mode: "demand" },
+};
+
+export async function scheduleMap() {
+  const rows = await _p.setting.findMany({
+    where: { key: { in: SCHEDULABLE.map((k) => `slotmode:${k}`) } },
+  });
+  const saved = new Map(rows.map((r) => [r.key.replace("slotmode:", ""), r.value]));
+  const out: Record<string, { mode: string; time?: string }> = {};
+  for (const k of SCHEDULABLE) {
+    const raw = saved.get(k);
+    if (raw) {
+      try { out[k] = JSON.parse(raw); continue; } catch {}
+    }
+    out[k] = SCHEDULE_DEFAULTS[k];
+  }
+  return out;
+}
+
+export async function setSchedule(kind: string, mode: string, time?: string) {
+  if (!SCHEDULABLE.includes(kind)) throw new Error("этот тип не планируется");
+  if (!["time", "demand"].includes(mode)) throw new Error("mode: time | demand");
+  if (mode === "time" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time || "")) {
+    throw new Error("время в формате ЧЧ:ММ");
+  }
+  const value = JSON.stringify(mode === "time" ? { mode, time } : { mode });
+  await _p.setting.upsert({
+    where: { key: `slotmode:${kind}` },
+    create: { key: `slotmode:${kind}`, value },
+    update: { value },
+  });
 }
