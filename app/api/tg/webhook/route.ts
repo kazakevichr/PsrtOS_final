@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { approveSignup, askOwner, rejectSignup, sendTo, tgCall, ownerWithTg, webhookSecret, ROLE_NAME } from "@/lib/telegram";
+import { extractTask, looksLikeTask, resolveAssignee } from "@/lib/tgtasks";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,60 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true });
 }
 
+// Групповые чаты: бот молча читает и выцепляет поручения. Отвечает только
+// когда нашёл задачу — иначе засорял бы переписку.
+async function onGroupMessage(m: any) {
+  const text = String(m.text || "").trim();
+  if (!looksLikeTask(text)) return;
+  const fromName = [m.from?.first_name, m.from?.last_name].filter(Boolean).join(" ") ||
+    m.from?.username || "кто-то";
+  let found;
+  try {
+    found = await extractTask(text, fromName, m.chat.title || "рабочий чат");
+  } catch (e) {
+    console.error("[tg] разбор задачи упал:", e);
+    return;
+  }
+  if (!found) return;
+
+  const assignee = await resolveAssignee(found.assignee_hint ||
+    (m.reply_to_message?.from?.username ? "@" + m.reply_to_message.from.username : ""));
+  if (!assignee) return;
+
+  const task = await prisma.task.create({
+    data: {
+      assignedToUserId: assignee.id,
+      title: found.title,
+      dueDate: found.due ? new Date(found.due + "T12:00:00Z") : null,
+      isAuto: true,
+      source: `тг: ${fromName}`,
+      sourceChat: m.chat.title || String(m.chat.id),
+    },
+  });
+
+  const due = task.dueDate
+    ? ` · дедлайн ${task.dueDate.toLocaleDateString("ru-RU", { timeZone: "Europe/Moscow" })}`
+    : "";
+  await tgCall("sendMessage", {
+    chat_id: m.chat.id,
+    reply_to_message_id: m.message_id,
+    text: `📌 Задача: ${task.title}
+Исполнитель: ${assignee.name}${due}
+Записал в Postos.`,
+    reply_markup: { inline_keyboard: [[
+      { text: "✅ Сделано", callback_data: `td:${task.id}` },
+      { text: "🗑 Не задача", callback_data: `tx:${task.id}` },
+    ]] },
+  });
+  // Личный пуш исполнителю, если привязан и это не автор сообщения
+  if (assignee.tgChatId && assignee.tgChatId !== String(m.from?.id)) {
+    await sendTo(assignee.tgChatId, `📌 <b>Новая задача из чата «${m.chat.title || ""}»</b>
+${task.title}${due}`);
+  }
+}
+
 async function onMessage(m: any) {
+  if (["group", "supergroup"].includes(m.chat?.type)) return onGroupMessage(m);
   const chatId = String(m.chat.id);
   const text = String(m.text || "").trim();
   const username = m.from?.username || null;
@@ -97,15 +151,30 @@ async function onMessage(m: any) {
 async function onCallback(q: any) {
   const chatId = String(q.message?.chat?.id || "");
   const data = String(q.data || "");
-  const owner = await ownerWithTg();
   const answer = (text: string) => tgCall("answerCallbackQuery", { callback_query_id: q.id, text });
+  const [action, signupId, role] = data.split(":");
+  if (action === "td" || action === "tx") {
+    const task = await prisma.task.findUnique({ where: { id: signupId } });
+    if (!task) { await answer("Задача не найдена"); return; }
+    if (action === "td") {
+      await prisma.task.update({ where: { id: task.id }, data: { isDone: true } });
+      await answer("Отмечено сделанным");
+    } else {
+      await prisma.task.delete({ where: { id: task.id } });
+      await answer("Удалил — не задача");
+    }
+    await tgCall("editMessageText", {
+      chat_id: chatId, message_id: q.message.message_id,
+      text: action === "td" ? `✅ ${task.title} — сделано` : `🗑 ${task.title} — снята`,
+    });
+    return;
+  }
 
+  const owner = await ownerWithTg();
   if (!owner || chatId !== owner.tgChatId) {
     await answer("Одобрять доступ может только владелец.");
     return;
   }
-
-  const [action, signupId, role] = data.split(":");
   if (action === "ok" && (role === "MANAGER" || role === "SMM")) {
     const res = await approveSignup(signupId, role);
     await answer(res.error || `Одобрено: ${ROLE_NAME[role]}`);

@@ -136,6 +136,9 @@ model Task {
   isDone           Boolean   @default(false)
   isAuto           Boolean   @default(false)
   createdAt        DateTime  @default(now())
+  // Задачи, выловленные ботом из чатов: откуда пришла и кто написал.
+  source           String?
+  sourceChat       String?
 
   assignedTo User     @relation("AssignedUser", fields: [assignedToUserId], references: [id])
   partner    Partner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)

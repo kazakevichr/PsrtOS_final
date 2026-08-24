@@ -4,6 +4,7 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   let lastOracle = 0;
+  let lastRemindDay = "";
 
   const tick = async () => {
     try {
@@ -32,6 +33,44 @@ export async function register() {
     }
   };
 
-  setInterval(tick, 20 * 60 * 1000);
-  setTimeout(tick, 60 * 1000); // первый сбор через минуту после старта
+  // Контроль задач: утром в 09:xx МСК напоминаем исполнителям про дедлайны
+  // сегодня и просрочку; просроченное дублируем владельцу.
+  const remind = async () => {
+    const mskHour = Number(new Intl.DateTimeFormat("ru-RU", {
+      timeZone: "Europe/Moscow", hour: "numeric", hour12: false,
+    }).format(new Date()));
+    const day = new Date().toISOString().slice(0, 10);
+    if (mskHour !== 9 || lastRemindDay === day) return;
+    lastRemindDay = day;
+    try {
+      const { prisma } = await import("./lib/prisma");
+      const { sendTo, ownerWithTg } = await import("./lib/telegram");
+      const endOfToday = new Date(); endOfToday.setUTCHours(23, 59, 59, 999);
+      const tasks = await prisma.task.findMany({
+        where: { isDone: false, dueDate: { lte: endOfToday } },
+        include: { assignedTo: true },
+      });
+      const now = new Date();
+      const overdue: string[] = [];
+      for (const t of tasks) {
+        const late = t.dueDate! < now;
+        const line = `${late ? "🔴 просрочено" : "🟡 дедлайн сегодня"}: ${t.title}`;
+        if (t.assignedTo.tgChatId) await sendTo(t.assignedTo.tgChatId, `⏰ ${line}`);
+        if (late) overdue.push(`${t.title} — ${t.assignedTo.name}`);
+      }
+      const owner = await ownerWithTg();
+      if (owner?.tgChatId && overdue.length) {
+        await sendTo(owner.tgChatId, `🔴 <b>Просроченные задачи (${overdue.length})</b>
+` + overdue.join("
+"));
+      }
+      if (tasks.length) console.log(`[задачи] напоминаний: ${tasks.length}, просрочено: ${overdue.length}`);
+    } catch (e) {
+      console.error("[задачи] напоминания упали:", e);
+    }
+  };
+
+  const tickAll = async () => { await tick(); await remind(); };
+  setInterval(tickAll, 20 * 60 * 1000);
+  setTimeout(tickAll, 60 * 1000); // первый прогон через минуту после старта
 }
