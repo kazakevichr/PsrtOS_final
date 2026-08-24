@@ -12,6 +12,21 @@ export async function POST(req: Request) {
   if (!need || req.headers.get("x-factory-key") !== need) {
     return new NextResponse("forbidden", { status: 403 });
   }
+  // Защита от повтора: отметка о рассылке живёт в базе, а не в памяти
+  // процесса. Раньше при каждом деплое контейнер стартовал с чистой памятью
+  // и в течение того же девятого часа присылал напоминания заново.
+  const day = new Date().toISOString().slice(0, 10);
+  const force = new URL(req.url).searchParams.get("force") === "1";
+  const stamp = await prisma.setting.findUnique({ where: { key: "tasks:remind" } });
+  if (!force && stamp?.value === day) {
+    return NextResponse.json({ skipped: "уже рассылали сегодня", day });
+  }
+  await prisma.setting.upsert({
+    where: { key: "tasks:remind" },
+    create: { key: "tasks:remind", value: day },
+    update: { value: day },
+  });
+
   const endOfToday = new Date();
   endOfToday.setUTCHours(23, 59, 59, 999);
   const tasks = await prisma.task.findMany({
@@ -30,5 +45,5 @@ export async function POST(req: Request) {
   if (owner?.tgChatId && overdue.length) {
     await sendTo(owner.tgChatId, `🔴 <b>Просроченные задачи (${overdue.length})</b>\n` + overdue.join("\n"));
   }
-  return NextResponse.json({ reminded: tasks.length, overdue: overdue.length });
+  return NextResponse.json({ day, reminded: tasks.length, overdue: overdue.length });
 }

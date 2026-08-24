@@ -296,3 +296,11 @@ model RouteFlag {
 
   @@unique([platform, kind])
 }
+
+// Мелкие служебные отметки, которые должны переживать перезапуск контейнера:
+// например, какого числа уже отправлены утренние напоминания по задачам.
+model Setting {
+  key   String @id
+  value String
+  at    DateTime @updatedAt
+}
