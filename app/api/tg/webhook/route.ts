@@ -44,14 +44,21 @@ async function onGroupMessage(m: any) {
   }
   if (!found) return;
 
-  const assignee = await resolveAssignee(found.assignee_hint ||
-    (m.reply_to_message?.from?.username ? "@" + m.reply_to_message.from.username : ""));
+  const hint = found.assignee_hint ||
+    (m.reply_to_message?.from?.username ? "@" + m.reply_to_message.from.username : "");
+  const assignee = await resolveAssignee(hint);
   if (!assignee) return;
+
+  // Адресат не из Postos: задача падает владельцу, но с пометкой, кому она
+  // была адресована в чате — чтобы Роман видел, кого дожимать.
+  const unknownAssignee = Boolean(hint) && assignee.role === "OWNER" &&
+    !hint.toLowerCase().replace(/^@/, "").includes((assignee.tgUsername || "@@").toLowerCase()) &&
+    !assignee.name.toLowerCase().includes(hint.toLowerCase().replace(/^@/, ""));
 
   const task = await prisma.task.create({
     data: {
       assignedToUserId: assignee.id,
-      title: found.title,
+      title: unknownAssignee ? `${found.title} (исполнитель в чате: ${hint})` : found.title,
       dueDate: found.due ? new Date(found.due + "T12:00:00Z") : null,
       isAuto: true,
       source: `тг: ${fromName}`,
