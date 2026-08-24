@@ -160,9 +160,37 @@ async function onCallback(q: any) {
   const data = String(q.data || "");
   const answer = (text: string) => tgCall("answerCallbackQuery", { callback_query_id: q.id, text });
   const [action, signupId, role] = data.split(":");
-  if (action === "td" || action === "tx") {
-    const task = await prisma.task.findUnique({ where: { id: signupId } });
+
+  // Кнопки задач: жать может только исполнитель или владелец — иначе любой
+  // участник чата закрывал бы чужие задачи. Владелец узнаёт о каждой отметке
+  // личным сообщением и может вернуть задачу в работу.
+  if (action === "td" || action === "tx" || action === "tr") {
+    const task = await prisma.task.findUnique({
+      where: { id: signupId }, include: { assignedTo: true },
+    });
     if (!task) { await answer("Задача не найдена"); return; }
+    const presser = await prisma.user.findFirst({ where: { tgChatId: String(q.from?.id || "") } });
+    const isOwner = presser?.role === "OWNER";
+    const isAssignee = presser?.id === task.assignedToUserId;
+    if (!presser || (!isOwner && !isAssignee)) {
+      await answer("Отметить может только исполнитель или владелец.");
+      return;
+    }
+
+    if (action === "tr") {
+      if (!isOwner) { await answer("Вернуть в работу может только владелец."); return; }
+      await prisma.task.update({ where: { id: task.id }, data: { isDone: false } });
+      await answer("Вернул в работу");
+      if (task.assignedTo.tgChatId) {
+        await sendTo(task.assignedTo.tgChatId, `↩️ <b>Задача возвращена в работу</b>\n${task.title}\nВладелец не принял выполнение.`);
+      }
+      await tgCall("editMessageText", {
+        chat_id: chatId, message_id: q.message.message_id,
+        text: `↩️ ${task.title} — возвращена в работу (${task.assignedTo.name})`,
+      });
+      return;
+    }
+
     if (action === "td") {
       await prisma.task.update({ where: { id: task.id }, data: { isDone: true } });
       await answer("Отмечено сделанным");
@@ -172,8 +200,26 @@ async function onCallback(q: any) {
     }
     await tgCall("editMessageText", {
       chat_id: chatId, message_id: q.message.message_id,
-      text: action === "td" ? `✅ ${task.title} — сделано` : `🗑 ${task.title} — снята`,
+      text: action === "td"
+        ? `✅ ${task.title} — сделано (${presser.name})`
+        : `🗑 ${task.title} — снята (${presser.name})`,
     });
+    // Отметил не владелец — владельцу личное уведомление с кнопкой возврата.
+    if (!isOwner) {
+      const owner = await ownerWithTg();
+      if (owner?.tgChatId) {
+        if (action === "td") {
+          await tgCall("sendMessage", {
+            chat_id: owner.tgChatId, parse_mode: "HTML",
+            text: `✅ <b>${presser.name} отметил задачу сделанной</b>\n${task.title}` +
+              (task.sourceChat ? `\nЧат: ${task.sourceChat}` : ""),
+            reply_markup: { inline_keyboard: [[{ text: "↩️ Вернуть в работу", callback_data: `tr:${task.id}` }]] },
+          });
+        } else {
+          await sendTo(owner.tgChatId, `🗑 <b>${presser.name} снял задачу как «не задачу»</b>\n${task.title}`);
+        }
+      }
+    }
     return;
   }
 
