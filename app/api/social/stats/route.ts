@@ -68,14 +68,25 @@ export async function GET() {
       totalViews: p.totalViews ?? null,
       lang: r.platform === "yt" ? r.key : undefined,
       source: "factory",
-      // У YouTube просмотры в history кумулятивные — дашборду нужна дневная
-      // дельта, считаем её здесь, чтобы фронт работал с одной формой.
-      history: history.map((h, i) => ({
-        ...h,
-        views: r.platform === "yt"
-          ? Math.max(0, (h.views || 0) - (i > 0 ? history[i - 1].views || 0 : h.views || 0))
-          : h.views,
-      })),
+      // И YouTube, и TikTok отдают накопленные с начала времён числа: канал
+      // хранит суммарные просмотры, TikTok — сумму по роликам и лайки за всё
+      // время. Дашборду нужны дневные величины, поэтому считаем дельту здесь.
+      // Раньше дельта была только у YouTube, и суммы по TikTok завышались в
+      // разы: неактивный оракловский аккаунт «набирал» 2268 просмотров каждый
+      // день, хотя это одно и то же накопленное число.
+      history: history.map((h, i) => {
+        const prev: any = i > 0 ? history[i - 1] : null;
+        const delta = (field: string) =>
+          Math.max(0, (h[field] || 0) - (prev ? prev[field] || 0 : h[field] || 0));
+        if (r.platform === "yt") return { ...h, views: delta("views") };
+        return {
+          ...h,
+          views: delta("views"),
+          likes: delta("likes"),
+          comments: delta("comments"),
+          shares: delta("shares"),
+        };
+      }),
       media: media.map((m) => ({ ...m, caption: m.caption ?? m.title ?? "" })),
       updatedAt: r.updatedAt.toISOString(),
     });
