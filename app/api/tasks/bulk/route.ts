@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { muteAutoTask } from "@/lib/autoTasks";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,10 @@ export async function POST(req: Request) {
     : null;
   if (!where) return NextResponse.json({ error: "нужен what: auto|done|overdue-auto" }, { status: 400 });
 
+  // Гасим партнёров пачкой, иначе авто-напоминания вернутся при первом же
+  // заходе на страницу задач.
+  const doomed = await prisma.task.findMany({ where, select: { isAuto: true, partnerId: true } });
   const { count } = await prisma.task.deleteMany({ where });
+  for (const t of doomed) if (t.isAuto && t.partnerId) await muteAutoTask(t.partnerId);
   return NextResponse.json({ deleted: count });
 }
