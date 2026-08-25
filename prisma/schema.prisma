@@ -306,3 +306,38 @@ model Setting {
   value String
   at    DateTime @updatedAt
 }
+
+// Паспорт контента: разметка поста по осям для нейро-аналитики.
+// Заводские посты размечает сам завод (labeledBy=factory), ручные —
+// нейросеть по описанию (labeledBy=ai).
+model ContentMeta {
+  key       String   @id // нормализованный permalink без протокола
+  platform  String   @default("instagram")
+  source    String   @default("manual") // factory | manual
+  format    String   @default("") // видео | карусель | фото
+  origin    String   @default("") // персонаж | карусель завода | тренер Ж | ИИ-аватар | тренер М | нарезка | ручной
+  topic     String   @default("")
+  hook      String   @default("") // вопрос | боль | цифра | до-после | интрига | нет
+  content   String   @default("") // практика | анонс | лайфстайл | продажа
+  cta       String   @default("") // кодовое слово | ссылка | подписка | нет
+  ctaWord   String   @default("") // само кодовое слово, если есть
+  leads     Int      @default(-1) // заявки: комментарии с кодовым словом (-1 — не считали)
+  leadsAt   DateTime?
+  labeledBy String   @default("") // factory | ai
+  at        DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Рекомендация нейро-аналитики: живёт между анализами, чтобы отслеживать
+// судьбу (внедрена ли) и не советовать одно и то же по кругу.
+model Recommendation {
+  id        String    @id @default(cuid())
+  scope     String    @default("")
+  text      String
+  norm      String    @unique // нормализованный текст для дедупа
+  status    String    @default("new") // new | task | done | dismissed
+  taskId    String    @default("")
+  effect    String    @default("")
+  createdAt DateTime  @default(now())
+  doneAt    DateTime?
+}

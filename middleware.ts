@@ -13,6 +13,7 @@ export const config = {
     "/settings/:path*",
     "/insta/:path*",
     "/social/:path*",
+    "/analytics/:path*",
     "/oracle/:path*",
     "/factory/:path*",
     "/cabinet/:path*",

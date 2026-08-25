@@ -4,6 +4,7 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   let lastOracle = 0;
+  let lastMeta = 0;
   let lastRemindDay = "";
 
   const tick = async () => {
@@ -68,7 +69,23 @@ export async function register() {
     }
   };
 
-  const tickAll = async () => { await tick(); await remind(); await quota(); };
+  // Паспорт контента: разметка новых постов и заявки по кодовым словам.
+  const meta = async () => {
+    if (Date.now() - lastMeta < 55 * 60 * 1000) return;
+    lastMeta = Date.now();
+    try {
+      const r = await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/factory/meta/label`, {
+        method: "POST",
+        headers: { "x-factory-key": process.env.IG_HOST_KEY || "" },
+      });
+      const s = await r.json();
+      console.log(`[паспорт] завод +${s.backfilled}, нейро ${s.labeled ?? 0}, заявки ${s.counted ?? 0}`);
+    } catch (e) {
+      console.error("[паспорт] разметка упала:", e);
+    }
+  };
+
+  const tickAll = async () => { await tick(); await remind(); await quota(); await meta(); };
   setInterval(tickAll, 20 * 60 * 1000);
   setTimeout(tickAll, 60 * 1000); // первый прогон через минуту после старта
 }
