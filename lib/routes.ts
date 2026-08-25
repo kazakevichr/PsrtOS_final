@@ -4,9 +4,20 @@ import { prisma } from "@/lib/prisma";
 export const PLATFORMS = [
   { key: "ig_main", label: "super.fit24" },
   { key: "ig_woman", label: "woman" },
+  { key: "ig_man", label: "man" },
   { key: "youtube", label: "YouTube" },
   { key: "tiktok", label: "TikTok" },
 ];
+
+// Какие типы контента вообще осмысленны на профиле — раскладка Романа
+// от 25.08.2026. Всё вне списка в матрице показывается прочерком.
+export const RELEVANT: Record<string, string[]> = {
+  ig_main: ["make", "carousel", "avatar", "trainer:female", "trainer:male", "manual"],
+  ig_woman: ["repost", "trainer:female"],
+  ig_man: ["trainer:male", "repost"],
+  youtube: ["make", "avatar", "trainer:female", "trainer:male", "repost", "manual"],
+  tiktok: ["make", "avatar", "trainer:female", "trainer:male", "repost", "manual"],
+};
 
 export const KINDS = [
   { kind: "make", label: "Персонаж", note: "" },
@@ -18,11 +29,12 @@ export const KINDS = [
   { kind: "manual", label: "Ручные из бота", note: "" },
 ];
 
-// Клетки, которых не бывает: карусель — картинки, ручные в woman не идут.
-export const NA: Record<string, string[]> = {
-  carousel: ["youtube", "tiktok"],
-  manual: ["ig_woman"],
-};
+// Клетки, которых не бывает: карусель — картинки (на видеоплощадках отдельная
+// подпись «не видео»), остальное — вне раскладки профилей.
+export const NA: Record<string, string[]> = {};
+for (const k of ["make", "carousel", "avatar", "trainer:female", "trainer:male", "repost", "manual"]) {
+  NA[k] = PLATFORMS.map((p) => p.key).filter((pk) => !(RELEVANT[pk] || []).includes(k));
+}
 
 // Осознанный запрет: чужие нарезки на YouTube/TikTok — путь к страйкам.
 export const LOCKED: Record<string, string[]> = {

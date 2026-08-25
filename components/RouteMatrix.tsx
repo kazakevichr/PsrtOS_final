@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 export default function RouteMatrix({ canManage = true }: { canManage?: boolean }) {
   const [data, setData] = useState<any>(null);
   const [busy, setBusy] = useState("");
+  const [profile, setProfile] = useState("all");
   const [note, setNote] = useState("");
 
   async function load() {
@@ -51,6 +52,10 @@ export default function RouteMatrix({ canManage = true }: { canManage?: boolean 
 
   if (!data) return null;
   const { platforms, kinds, na, locked, flags, schedule = {}, schedulable = [] } = data;
+  const showPlatforms = profile === "all" ? platforms : platforms.filter((p: any) => p.key === profile);
+  const showKinds = profile === "all"
+    ? kinds
+    : kinds.filter((k: any) => !(na[k.kind] || []).includes(profile));
   const off = (p: string) => flags[`${p}|*`] === false;
 
   const Switch = ({ on, dim, onClick, label }: any) => (
@@ -72,15 +77,26 @@ export default function RouteMatrix({ canManage = true }: { canManage?: boolean 
         <h2 className="font-semibold">🔀 Маршруты публикации</h2>
         <span className="text-xs text-gray-400">применяется сразу</span>
       </div>
-      <p className="text-xs text-gray-400 mt-0.5 mb-3">
+      <p className="text-xs text-gray-400 mt-0.5 mb-2">
         Что и куда уходит. Выключенное не публикуется ни автопланом, ни кнопкой в боте.
       </p>
+      <div className="flex flex-wrap gap-1 mb-3">
+        {[{ key: "all", label: "Все аккаунты" }, ...platforms].map((p: any) => (
+          <button
+            key={p.key}
+            onClick={() => setProfile(p.key)}
+            className={`px-2.5 py-1 rounded-lg text-xs ${profile === p.key ? "bg-brand-600 text-white" : "bg-white border hover:bg-gray-50"}`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
 
       <table className="w-full text-sm min-w-[560px]">
         <thead>
           <tr className="text-gray-500 text-left">
             <th className="py-1 pr-4 font-normal">Тип контента</th>
-            {platforms.map((p: any) => (
+            {showPlatforms.map((p: any) => (
               <th key={p.key} className="py-1 px-2 font-normal text-center">
                 {p.label}
                 {off(p.key) && <span className="block text-[11px] text-yellow-700">на паузе</span>}
@@ -89,7 +105,7 @@ export default function RouteMatrix({ canManage = true }: { canManage?: boolean 
           </tr>
         </thead>
         <tbody>
-          {kinds.map((k: any) => (
+          {showKinds.map((k: any) => (
             <tr key={k.kind} className="border-t">
               <td className="py-2 pr-4">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -129,7 +145,7 @@ export default function RouteMatrix({ canManage = true }: { canManage?: boolean 
                   )}
                 </div>
               </td>
-              {platforms.map((p: any) => {
+              {showPlatforms.map((p: any) => {
                 const isNa = (na[k.kind] || []).includes(p.key);
                 const isLocked = (locked[k.kind] || []).includes(p.key);
                 const on = flags[`${p.key}|${k.kind}`];
