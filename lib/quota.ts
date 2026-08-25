@@ -118,12 +118,25 @@ export function monthWorkdays(ym: string) {
   return n;
 }
 
-// Заработок месяца по факту + доп задачи с ценой.
+// Заработок месяца по факту + доп задачи с ценой. Отсчёт — со стартовой
+// даты (Setting quota:start): дни до неё в деньгах не участвуют, потолок
+// месяца пропорционален оставшимся рабочим дням.
 export async function earnings(ym?: string) {
   const { rules, days } = await quotaDays(63);
   const month = ym || kratParts().date.slice(0, 7);
-  const inMonth = days.filter((d) => d.date.startsWith(month) && d.isWorkday);
+  const startRow = await prisma.setting.findUnique({ where: { key: "quota:start" } });
+  const start = startRow?.value || "0000-00-00";
+  const inMonth = days.filter(
+    (d) => d.date.startsWith(month) && d.isWorkday && d.date >= start
+  );
   const wd = monthWorkdays(month);
+  // Рабочие дни месяца, попадающие в зачёт (со старта и до конца месяца).
+  const [y, m] = month.split("-").map(Number);
+  let wdCounted = 0;
+  for (let dd = 1; dd <= new Date(y, m, 0).getDate(); dd++) {
+    const date = `${month}-${String(dd).padStart(2, "0")}`;
+    if (date >= start && new Date(Date.UTC(y, m - 1, dd)).getUTCDay() !== 0) wdCounted++;
+  }
 
   const perRule = rules.map((r) => {
     const dayRate = r.monthlyRate / wd;
@@ -138,7 +151,8 @@ export async function earnings(ym?: string) {
     }
     return {
       key: r.key, label: r.label, monthlyRate: r.monthlyRate,
-      earned: Math.round(earned), closed, passed,
+      max: Math.round((r.monthlyRate / wd) * wdCounted),
+      earned: Math.round(earned), closed, passed, counted: wdCounted,
       tracked: r.accounts.length > 0,
     };
   });
@@ -156,10 +170,10 @@ export async function earnings(ym?: string) {
   }
   const extrasDone = extras.filter((t) => t.isDone);
   return {
-    month, workdays: wd,
+    month, workdays: wd, start: start > "0000-00-00" ? start : null,
     rules: perRule,
     base: perRule.reduce((s, r) => s + r.earned, 0),
-    baseMax: perRule.reduce((s, r) => s + r.monthlyRate, 0),
+    baseMax: perRule.reduce((s, r) => s + r.max, 0),
     extras: extras.map((t) => ({
       id: t.id, title: t.title, price: t.price, isDone: t.isDone,
     })),

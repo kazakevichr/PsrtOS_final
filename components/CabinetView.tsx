@@ -41,7 +41,9 @@ export default function CabinetView() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-bold">Кабинет СММ{earnings.smm ? ` · ${earnings.smm.name}` : ""}</h1>
-            <p className="text-sm text-gray-500">{monthName} · расчёт с 1-го числа · пн–сб · день до 22:30 по Красноярску</p>
+            <p className="text-sm text-gray-500">
+              {monthName} · {earnings.start ? `зачёт с ${new Date(earnings.start + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}` : "расчёт с 1-го числа"} · пн–сб · день до 22:30 по Красноярску
+            </p>
           </div>
           <div className="text-right">
             <div className="text-sm text-gray-500">заработано по факту</div>
@@ -57,10 +59,10 @@ export default function CabinetView() {
               <div className="text-sm text-gray-500">{r.label}</div>
               <div className="text-xl font-bold mt-0.5">
                 {r.tracked ? fmtR(r.earned) : "—"}
-                <span className="text-sm text-gray-400 font-normal"> / {fmtR(r.monthlyRate)}</span>
+                <span className="text-sm text-gray-400 font-normal"> / {fmtR(r.max)}</span>
               </div>
               <div className="text-xs text-gray-500 mt-0.5">
-                {r.tracked ? `закрыто ${r.closed} из ${r.passed} рабочих дней` : "аккаунт ещё не подключён"}
+                {r.tracked ? `закрыто ${r.closed} из ${r.passed} рабочих дней в зачёте` : "аккаунт ещё не подключён"}
               </div>
             </div>
           ))}
