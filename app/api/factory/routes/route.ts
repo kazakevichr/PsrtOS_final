@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { KINDS, LOCKED, NA, PLATFORMS, SCHEDULABLE, allowed, blocked, routeMap, scheduleMap, setSchedule } from "@/lib/routes";
+import { LOCKED, NA, PLATFORMS, SCHEDULABLE, allowed, baseKind, blocked, kindsWithDonors, routeMap, scheduleMap, setSchedule } from "@/lib/routes";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +27,17 @@ export async function GET(req: Request) {
   if (platform && kind) {
     return NextResponse.json({ platform, kind, allowed: await allowed(platform, kind) });
   }
+  // na/locked раздаются по фактическим типам (донорские наследуют базовый
+  // repost) — интерфейсу не нужно знать про деление.
+  const kinds = await kindsWithDonors();
+  const na: Record<string, string[]> = {};
+  const locked: Record<string, string[]> = {};
+  for (const k of kinds) {
+    na[k.kind] = NA[baseKind(k.kind)] || [];
+    locked[k.kind] = LOCKED[baseKind(k.kind)] || [];
+  }
   return NextResponse.json({
-    platforms: PLATFORMS, kinds: KINDS, na: NA, locked: LOCKED,
+    platforms: PLATFORMS, kinds, na, locked,
     schedulable: SCHEDULABLE,
     flags: await routeMap(),
     schedule: await scheduleMap(),

@@ -54,25 +54,60 @@ const DEFAULTS: Record<string, Record<string, boolean>> = {
   manual: { ig_main: true, youtube: true, tiktok: true },
 };
 
+// Нарезки делятся по донорам: подтипы repost:<донор>. Список доноров
+// присылает repost-завод (Setting repost:donors) — новый донор появляется
+// в матрице без деплоя. Правила (где уместно, замки, дефолты) наследуются
+// от базового repost.
+export const baseKind = (k: string) => (k.startsWith("repost:") ? "repost" : k);
+
+export async function donors(): Promise<{ key: string; label: string }[]> {
+  const row = await prisma.setting.findUnique({ where: { key: "repost:donors" } });
+  try {
+    const list = row ? JSON.parse(row.value) : [];
+    return Array.isArray(list)
+      ? list.filter((d) => d?.key).map((d) => ({ key: String(d.key), label: String(d.label || d.key) }))
+      : [];
+  } catch { return []; }
+}
+
+// Типы для матрицы: при известных донорах строка «Нарезки» раскрывается
+// на подстроки по донорам.
+export async function kindsWithDonors() {
+  const ds = await donors();
+  if (!ds.length) return KINDS;
+  const out: { kind: string; label: string; note: string }[] = [];
+  for (const k of KINDS) {
+    if (k.kind !== "repost") { out.push(k); continue; }
+    for (const d of ds) out.push({ kind: `repost:${d.key}`, label: `Нарезки · ${d.label}`, note: "ютуб-репост" });
+  }
+  return out;
+}
+
 export function defaultFor(platform: string, kind: string): boolean {
   if (kind === "*") return true;
-  return DEFAULTS[kind]?.[platform] ?? false;
+  return DEFAULTS[baseKind(kind)]?.[platform] ?? false;
 }
 
 export function blocked(platform: string, kind: string): boolean {
-  return (NA[kind] || []).includes(platform) || (LOCKED[kind] || []).includes(platform);
+  const b = baseKind(kind);
+  return (NA[b] || []).includes(platform) || (LOCKED[b] || []).includes(platform);
 }
 
 export async function routeMap() {
   const rows = await prisma.routeFlag.findMany();
   const saved = new Map(rows.map((r) => [`${r.platform}|${r.kind}`, r.enabled]));
   const flags: Record<string, boolean> = {};
+  const kinds = await kindsWithDonors();
   for (const p of PLATFORMS) {
     flags[`${p.key}|*`] = saved.get(`${p.key}|*`) ?? true;
-    for (const k of KINDS) {
+    for (const k of kinds) {
       if (blocked(p.key, k.kind)) continue;
+      // Донорский тумблер наследует состояние общего «Нарезки», пока его
+      // не переключали отдельно — поведение не меняется от самого деления.
       flags[`${p.key}|${k.kind}`] =
-        saved.get(`${p.key}|${k.kind}`) ?? defaultFor(p.key, k.kind);
+        saved.get(`${p.key}|${k.kind}`) ??
+        saved.get(`${p.key}|${baseKind(k.kind)}`) ??
+        defaultFor(p.key, k.kind);
     }
   }
   return flags;
@@ -82,7 +117,15 @@ export async function routeMap() {
 export async function allowed(platform: string, kind: string) {
   if (blocked(platform, kind)) return false;
   const flags = await routeMap();
-  return Boolean(flags[`${platform}|*`]) && Boolean(flags[`${platform}|${kind}`]);
+  const key = `${platform}|${kind}`;
+  if (!(key in flags) && kind === "repost") {
+    // Переходный случай: завод ещё спрашивает общий repost, а матрица уже
+    // донорская — разрешаем, если включён хотя бы один донор.
+    const ds = await donors();
+    return Boolean(flags[`${platform}|*`]) &&
+      ds.some((d) => flags[`${platform}|repost:${d.key}`]);
+  }
+  return Boolean(flags[`${platform}|*`]) && Boolean(flags[key]);
 }
 
 // Расписание производства по типам: во сколько стартует слот или «по запросу».
