@@ -59,10 +59,16 @@ export async function collabList(): Promise<Collab[]> {
   try { return row ? JSON.parse(row.value) : []; } catch { return []; }
 }
 
+// Один и тот же пост живёт под /p/ и /reel/ — сравниваем по шорткоду,
+// иначе один коллаб можно зачесть дважды разными ссылками.
+export const collabKey = (u: string) => {
+  const m = (u || "").match(/\/(?:p|reel|reels)\/([^\/?#]+)/);
+  return m ? m[1] : u.split("?")[0].replace(/\/$/, "");
+};
+
 export async function collabAdd(c: Collab): Promise<"added" | "dup"> {
   const list = await collabList();
-  const clean = (u: string) => u.split("?")[0].replace(/\/$/, "");
-  if (list.some((x) => clean(x.url) === clean(c.url))) return "dup";
+  if (list.some((x) => collabKey(x.url) === collabKey(c.url))) return "dup";
   list.push(c);
   await prisma.setting.upsert({
     where: { key: "quota:collab" },
@@ -73,8 +79,7 @@ export async function collabAdd(c: Collab): Promise<"added" | "dup"> {
 }
 
 export async function collabRemove(url: string) {
-  const clean = (u: string) => u.split("?")[0].replace(/\/$/, "");
-  const list = (await collabList()).filter((x) => clean(x.url) !== clean(url));
+  const list = (await collabList()).filter((x) => collabKey(x.url) !== collabKey(url));
   await prisma.setting.upsert({
     where: { key: "quota:collab" },
     create: { key: "quota:collab", value: JSON.stringify(list) },

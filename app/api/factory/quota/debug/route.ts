@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { quotaRules, collabList, kratParts } from "@/lib/quota";
+import { quotaRules, collabList, collabKey, kratParts } from "@/lib/quota";
 
 export const dynamic = "force-dynamic";
 
@@ -61,4 +61,29 @@ export async function GET(req: Request) {
     };
   }
   return NextResponse.json(out);
+}
+
+// Чистка дублей ручных зачётов: один пост — одна запись (по шорткоду).
+export async function POST(req: Request) {
+  const byKey = req.headers.get("x-factory-key") === process.env.IG_HOST_KEY;
+  if (!byKey) {
+    const s = await getServerSession(authOptions);
+    if (!s || s.user.role !== "OWNER") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+  }
+  const list = await collabList();
+  const seen = new Set<string>();
+  const kept = list.filter((c) => {
+    const k = `${c.rule}|${collabKey(c.url)}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  await prisma.setting.upsert({
+    where: { key: "quota:collab" },
+    create: { key: "quota:collab", value: JSON.stringify(kept) },
+    update: { value: JSON.stringify(kept) },
+  });
+  return NextResponse.json({ was: list.length, kept: kept.length });
 }
