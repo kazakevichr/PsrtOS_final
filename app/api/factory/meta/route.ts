@@ -24,6 +24,8 @@ export async function POST(req: Request) {
     hook: String(b.hook || ""),
     content: String(b.content || ""),
     cta: String(b.cta || ""),
+    visual: String(b.visual || "").slice(0, 40),
+    ctaVideo: String(b.ctaVideo || "").slice(0, 40),
     ctaWord: String(b.ctaWord || "").slice(0, 25).toUpperCase(),
     platform: String(b.platform || "instagram"),
   };

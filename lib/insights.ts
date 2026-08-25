@@ -66,6 +66,8 @@ export async function generateInsight(scope: string, posts: any[]): Promise<Insi
       topic: m?.topic || "",
       hook: m?.hook || "",
       content: m?.content || "",
+      visual: m?.visual || "",
+      cta_video: m?.ctaVideo || "",
       cta: m?.cta || "",
       leads: m && m.leads >= 0 ? m.leads : null,
       views: p.views ?? null,
@@ -93,7 +95,7 @@ export async function generateInsight(scope: string, posts: any[]): Promise<Insi
     max_tokens: 16000,
     system:
       "Ты аналитик контента соцсетей. Тебе дают посты профиля с метриками и паспортом " +
-      "(origin/topic/hook/content/cta — происхождение, тема, хук, содержание, призыв). " +
+      "(origin/topic/hook/content/visual/cta_video/cta — происхождение, тема, хук, содержание, визуал в кадре, призыв в ролике, призыв в тексте). " +
       "Найди закономерности, опираясь в первую очередь на оси паспорта. ПРАВИЛА ЧЕСТНОСТИ: " +
       "1) сравнивай только сопоставимое — заводское с заводским, ручное с ручным, один тип контента между собой; " +
       "не выдавай за причину время публикации, если утро и вечер занимают разные типы контента; " +

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { backfillFactoryMeta, labelBatch, countLeads } from "@/lib/meta";
+import { backfillFactoryMeta, labelBatch, labelVisualBatch, countLeads } from "@/lib/meta";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -12,6 +12,7 @@ export async function POST(req: Request) {
   }
   const backfilled = await backfillFactoryMeta();
   const label = await labelBatch(12);
+  const visual = await labelVisualBatch(8);
   const leads = await countLeads(10);
-  return NextResponse.json({ backfilled, ...label, ...leads });
+  return NextResponse.json({ backfilled, ...label, ...visual, ...leads });
 }

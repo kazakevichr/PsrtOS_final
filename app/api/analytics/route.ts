@@ -48,6 +48,7 @@ async function buildPosts(account: string, days: number) {
         meta: meta && {
           origin: meta.origin, topic: meta.topic, hook: meta.hook,
           content: meta.content, cta: meta.cta, ctaWord: meta.ctaWord,
+          visual: meta.visual, ctaVideo: meta.ctaVideo,
           leads: meta.leads,
         },
       });
@@ -68,7 +69,7 @@ export async function GET(req: Request) {
   const mature = posts.filter(
     (p) => Date.now() - new Date(p.timestamp).getTime() > 72 * 3600e3
   );
-  const slice = (axis: "content" | "hook" | "origin") => {
+  const slice = (axis: "content" | "hook" | "origin" | "visual") => {
     const groups = new Map<string, number[]>();
     for (const p of mature) {
       const v = p.meta?.[axis];
@@ -120,7 +121,10 @@ export async function GET(req: Request) {
       source: p.source, meta: p.meta,
     })),
     stats: { total: posts.length, labeled, mature: mature.length },
-    slices: { content: slice("content"), hook: slice("hook"), origin: slice("origin") },
+    slices: {
+      content: slice("content"), hook: slice("hook"),
+      origin: slice("origin"), visual: slice("visual"),
+    },
     leadgen: [...lead.entries()]
       .map(([word, g]) => ({
         word, ...g,

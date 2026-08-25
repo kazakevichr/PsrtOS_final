@@ -24,6 +24,13 @@ const AXES = {
   cta: ["кодовое слово", "ссылка", "подписка", "нет"],
 };
 
+// Визуал — что зритель видит в кадре. Закрытый список, чтобы срезы
+// не рассыпались на уникальные формулировки.
+export const VISUALS = [
+  "тренировка в зале", "тренировка дома", "говорит в камеру", "еда",
+  "скриншот приложения", "карточки с текстом", "до-после", "аватар/анимация", "прочее",
+];
+
 // Кодовое слово из текста: «Пишите "БАД" в комментариях» и вариации.
 function codeWord(text: string): string {
   const m = (text || "").match(/(?:напиши(?:те)?|пишите?|пиши)[^\n"«]{0,40}["«]([^"»\n]{2,25})["»]/i);
@@ -193,6 +200,74 @@ export async function countLeads(limit = 10) {
     } catch {}
   }
   return { counted };
+}
+
+// Визуал по обложкам: качаем превью поста и просим модель со зрением
+// отнести кадр к одному из закрытых вариантов. Пачками, раз в час.
+export async function labelVisualBatch(limit = 8) {
+  const apiKey = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
+  if (!apiKey) return { visual: 0, note: "нет ключа" };
+
+  const posts = await igPosts();
+  const metas = new Map((await prisma.contentMeta.findMany()).map((r) => [r.key, r]));
+  const fresh = Date.now() - 120 * 864e5;
+  const need = posts
+    .filter((p) => p.thumbnail && new Date(p.timestamp).getTime() > fresh)
+    .filter((p) => {
+      const r = metas.get(p.key);
+      return r && !r.visual;
+    })
+    .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+    .slice(0, limit);
+  if (!need.length) return { visual: 0 };
+
+  const blocks: any[] = [];
+  const keys: string[] = [];
+  for (const p of need) {
+    try {
+      const resp = await fetch(p.thumbnail);
+      if (!resp.ok) continue;
+      const buf = Buffer.from(await resp.arrayBuffer());
+      if (buf.length > 4_500_000) continue;
+      const mediaType = resp.headers.get("content-type")?.split(";")[0] || "image/jpeg";
+      blocks.push({ type: "text", text: `Обложка #${keys.length + 1}:` });
+      blocks.push({
+        type: "image",
+        source: { type: "base64", media_type: mediaType, data: buf.toString("base64") },
+      });
+      keys.push(p.key);
+    } catch {}
+  }
+  if (!keys.length) return { visual: 0, note: "обложки не скачались" };
+
+  blocks.push({
+    type: "text",
+    text:
+      "Это обложки постов фитнес-аккаунта, по порядку. Для каждой определи, что зритель видит в кадре — " +
+      `строго один вариант из списка: ${JSON.stringify(VISUALS)}. ` +
+      'ОТВЕТ — СТРОГО JSON-массив строк по порядку обложек, например ["еда","говорит в камеру"], без текста вокруг.',
+  });
+
+  const baseURL = process.env.ANTHROPIC_BASE_URL || process.env.CLAUDE_BASE_URL;
+  const client = new Anthropic({ apiKey, ...(baseURL ? { baseURL } : {}) });
+  const r = await client.messages.create({
+    model: process.env.META_LABEL_MODEL || "claude-sonnet-5",
+    max_tokens: 1000,
+    messages: [{ role: "user", content: blocks }],
+  });
+  const text = r.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+  const m = text.match(/\[[\s\S]*\]/);
+  if (!m) return { visual: 0, note: "модель не вернула JSON" };
+  let items: any[] = [];
+  try { items = JSON.parse(m[0]); } catch { return { visual: 0, note: "битый JSON" }; }
+
+  let done = 0;
+  for (let i = 0; i < keys.length && i < items.length; i++) {
+    const v = VISUALS.includes(items[i]) ? items[i] : "прочее";
+    await prisma.contentMeta.update({ where: { key: keys[i] }, data: { visual: v } });
+    done++;
+  }
+  return { visual: done };
 }
 
 export async function metaMap() {

@@ -320,6 +320,8 @@ model ContentMeta {
   hook      String   @default("") // вопрос | боль | цифра | до-после | интрига | нет
   content   String   @default("") // практика | анонс | лайфстайл | продажа
   cta       String   @default("") // кодовое слово | ссылка | подписка | нет
+  visual    String   @default("") // что в кадре: тренировка в зале | говорит в камеру | еда | ...
+  ctaVideo  String   @default("") // призыв внутри ролика: кодовое слово | подписка | ссылка | нет
   ctaWord   String   @default("") // само кодовое слово, если есть
   leads     Int      @default(-1) // заявки: комментарии с кодовым словом (-1 — не считали)
   leadsAt   DateTime?

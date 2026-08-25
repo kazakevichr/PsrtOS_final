@@ -164,6 +164,7 @@ export default function NeuroAnalytics({ isOwner }: { isOwner: boolean }) {
         <div className="flex flex-wrap gap-6">
           <Bars title="Содержание" rows={data.slices.content} />
           <Bars title="Хук" rows={data.slices.hook} />
+          <Bars title="Визуал в кадре" rows={data.slices.visual || []} />
           <Bars title="Происхождение" rows={data.slices.origin} />
         </div>
       </div>
