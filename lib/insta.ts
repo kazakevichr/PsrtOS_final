@@ -170,6 +170,9 @@ async function mediaWithInsights(igId: string, token: string, limit = 25) {
     id: m.id,
     caption: (m.caption || "").slice(0, 500),
     type: m.media_product_type || m.media_type,
+    // media_product_type у карусели — просто FEED, как у фото; для нормы СММ
+    // нужен исходный media_type (CAROUSEL_ALBUM/VIDEO/IMAGE).
+    mediaType: m.media_type || null,
     timestamp: m.timestamp,
     permalink: m.permalink,
     thumbnail: m.thumbnail_url || m.media_url || null,

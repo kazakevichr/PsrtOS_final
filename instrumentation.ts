@@ -55,7 +55,20 @@ export async function register() {
     }
   };
 
-  const tickAll = async () => { await tick(); await remind(); };
+  // Норма СММ: эндпоинт сам решает по красноярскому времени, что пора —
+  // напомнить или закрыть день; повторы отсекает отметками в базе.
+  const quota = async () => {
+    try {
+      await fetch(`http://127.0.0.1:${process.env.PORT || 3000}/api/factory/quota/check`, {
+        method: "POST",
+        headers: { "x-factory-key": process.env.IG_HOST_KEY || "" },
+      });
+    } catch (e) {
+      console.error("[норма] проверка упала:", e);
+    }
+  };
+
+  const tickAll = async () => { await tick(); await remind(); await quota(); };
   setInterval(tickAll, 20 * 60 * 1000);
   setTimeout(tickAll, 60 * 1000); // первый прогон через минуту после старта
 }

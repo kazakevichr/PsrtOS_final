@@ -4,6 +4,7 @@
 // тем LLM) и статистика производства из журнала событий завода.
 import { useEffect, useMemo, useState } from "react";
 import RouteMatrix from "@/components/RouteMatrix";
+import QuotaBoard from "@/components/QuotaBoard";
 
 const fmt = (n: any) => (n == null ? "—" : Number(n).toLocaleString("ru-RU"));
 
@@ -225,6 +226,7 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
 
       {tab === "stats" && (
         <>
+          <QuotaBoard />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="card"><div className="text-sm text-gray-500">Заводских заказов за {days} дн<Hint text="Сколько единиц контента завод взял в работу за выбранный период. Один заказ — один ролик или карусель; считается по журналу завода, куда он пишет каждый этап производства." /></div><div className="text-2xl font-bold mt-1">{fmt(jobs.length)}</div></div>
             <div className="card"><div className="text-sm text-gray-500">Опубликовано<Hint text="Заказы, дошедшие до публикации: завод прислал событие «опубликован» со ссылкой на пост. Заказы в работе и забракованные сюда не входят." /></div><div className="text-2xl font-bold mt-1">{fmt(jobs.filter((j) => j.event === "опубликован").length)}</div></div>
