@@ -15,5 +15,6 @@ export const config = {
     "/social/:path*",
     "/oracle/:path*",
     "/factory/:path*",
+    "/cabinet/:path*",
   ],
 };

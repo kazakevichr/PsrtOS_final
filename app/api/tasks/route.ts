@@ -35,6 +35,7 @@ export async function POST(req: Request) {
       partnerId: body.partnerId || null,
       title: body.title,
       dueDate: body.dueDate ? new Date(body.dueDate) : null,
+      price: body.price != null && Number.isFinite(Number(body.price)) ? Number(body.price) : null,
     },
   });
 

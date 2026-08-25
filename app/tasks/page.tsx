@@ -32,6 +32,7 @@ export default async function TasksPage() {
     isDone: t.isDone,
     isAuto: t.isAuto,
     source: t.source,
+    price: t.price,
     assignedTo: { name: t.assignedTo.name },
     partner: t.partner ? { id: t.partner.id, name: t.partner.name } : null,
   }));

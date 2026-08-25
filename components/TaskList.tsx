@@ -9,6 +9,7 @@ type Task = {
   isDone: boolean;
   isAuto?: boolean;
   source?: string | null;
+  price?: number | null;
   assignedTo: { name: string };
   partner: { id: string; name: string } | null;
 };
@@ -17,6 +18,7 @@ export default function TaskList({ tasks }: { tasks: Task[] }) {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [price, setPrice] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
 
@@ -56,10 +58,11 @@ export default function TaskList({ tasks }: { tasks: Task[] }) {
     await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, dueDate: dueDate || undefined }),
+      body: JSON.stringify({ title, dueDate: dueDate || undefined, price: price ? Number(price) : undefined }),
     });
     setTitle("");
     setDueDate("");
+    setPrice("");
     router.refresh();
   }
 
@@ -76,6 +79,7 @@ export default function TaskList({ tasks }: { tasks: Task[] }) {
       <form onSubmit={addTask} className="card flex flex-col sm:flex-row gap-2">
         <input className="input flex-1" placeholder="Новая задача..." value={title} onChange={(e) => setTitle(e.target.value)} />
         <input className="input sm:w-48" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+        <input className="input sm:w-32" type="number" placeholder="Цена ₽ (доп)" value={price} onChange={(e) => setPrice(e.target.value)} />
         <button className="btn btn-primary" type="submit">Добавить</button>
       </form>
 
@@ -116,6 +120,7 @@ export default function TaskList({ tasks }: { tasks: Task[] }) {
                 {t.title}
                 {t.partner && <span className="text-gray-400"> · партнёр: {t.partner.name}</span>}
                 {t.source && <span className="text-gray-400"> · {t.source}</span>}
+                {t.price != null && <span className="text-gray-500"> · {Number(t.price).toLocaleString("ru-RU")} ₽</span>}
               </span>
               <span className="text-gray-400">{t.assignedTo.name}</span>
               {t.dueDate && <span>{new Date(t.dueDate).toLocaleDateString("ru-RU")}</span>}

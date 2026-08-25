@@ -139,6 +139,8 @@ model Task {
   // Задачи, выловленные ботом из чатов: откуда пришла и кто написал.
   source           String?
   sourceChat       String?
+  // Цена доп задачи (п.3 договорённостей с СММ): оплачивается сверх нормы.
+  price            Float?
 
   assignedTo User     @relation("AssignedUser", fields: [assignedToUserId], references: [id])
   partner    Partner? @relation(fields: [partnerId], references: [id], onDelete: Cascade)

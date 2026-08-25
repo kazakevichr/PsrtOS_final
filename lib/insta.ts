@@ -190,6 +190,59 @@ function mergeMedia(prev: any[], fresh: any[]) {
     .slice(0, 200);
 }
 
+// Чужие публичные бизнес-аккаунты (Лео и т.п.): читаются через
+// business_discovery от имени нашего аккаунта, разрешений не требуется.
+// Список юзернеймов живёт в Setting bd:list — пополняется без деплоя.
+async function bdList(): Promise<string[]> {
+  const row = await prisma.setting.findUnique({ where: { key: "bd:list" } });
+  try { return row ? JSON.parse(row.value) : []; } catch { return []; }
+}
+
+async function collectDiscovery(username: string, token: string, date: string) {
+  const own = (process.env.META_IG_IDS || "").split(",")[0]?.trim();
+  if (!own) throw new Error("нет META_IG_IDS для business_discovery");
+  const fields = `business_discovery.username(${username}){username,name,followers_count,media_count,profile_picture_url,media.limit(30){media_type,media_product_type,timestamp,permalink,like_count,comments_count,caption}}`;
+  const d = await gget(own, { fields }, token);
+  const bd = d.business_discovery;
+  if (!bd) throw new Error(`${username}: business_discovery пуст`);
+  const media = (bd.media?.data || []).map((m: any) => ({
+    id: m.id,
+    caption: (m.caption || "").slice(0, 500),
+    type: m.media_product_type || m.media_type,
+    mediaType: m.media_type || null,
+    timestamp: m.timestamp,
+    permalink: m.permalink,
+    thumbnail: null,
+    likes: m.like_count ?? null,
+    comments: m.comments_count ?? null,
+  }));
+  const igId = `bd:${bd.username}`;
+  const row = await prisma.igAccount.findUnique({ where: { igId } });
+  let history: any[] = row ? JSON.parse(row.history) : [];
+  history = history.filter((h) => h.date !== date);
+  history.push({ date, followers: bd.followers_count ?? null });
+  history = history.slice(-365);
+  const fields2 = {
+    username: bd.username,
+    brand: brandFor(bd.username),
+    profile: JSON.stringify({
+      username: bd.username,
+      name: bd.name || bd.username,
+      profile_picture_url: bd.profile_picture_url || null,
+      followers: bd.followers_count ?? null,
+      mediaCount: bd.media_count ?? null,
+      discovery: true,
+    }),
+    history: JSON.stringify(history),
+    media: JSON.stringify(mergeMedia(row ? JSON.parse(row.media) : [], media)),
+  };
+  await prisma.igAccount.upsert({
+    where: { igId },
+    create: { igId, ...fields2 },
+    update: fields2,
+  });
+}
+
 export async function runCollect() {
   const date = new Date().toISOString().slice(0, 10);
   const token = process.env.META_TOKEN;
@@ -236,6 +289,14 @@ export async function runCollect() {
       summary.accounts++;
     } catch (e: any) {
       summary.errors.push(`${acc.username}: ${e.message}`);
+    }
+  }
+  for (const u of await bdList()) {
+    try {
+      await collectDiscovery(u, token!, date);
+      summary.accounts++;
+    } catch (e: any) {
+      summary.errors.push(`bd ${u}: ${e.message}`);
     }
   }
   return summary;

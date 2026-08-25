@@ -58,6 +58,7 @@ export default async function Navbar() {
     groupTitle("СММ"),
     navLink("/social", "Соц.Сети"),
     navLink("/factory", "Контент-завод"),
+    navLink("/cabinet", "Кабинет СММ"),
   ];
 
   const teamGroup = [
