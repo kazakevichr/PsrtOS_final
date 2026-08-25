@@ -2,6 +2,7 @@
 
 // Норма контента СММ: сетка дней с прогрессом по каруселям и видео.
 // Данные считаются сами — по ручным постам super.fit24 из сборщика.
+// Стрелками листается история неделями, «сегодня» — возврат к текущей.
 import { useEffect, useState } from "react";
 
 const WD: Record<string, string> = {
@@ -16,14 +17,21 @@ const COLORS: Record<string, string> = {
 
 export default function QuotaBoard() {
   const [data, setData] = useState<any>(null);
+  const [page, setPage] = useState(0); // 0 — текущая неделя, 1 — прошлая…
 
   useEffect(() => {
-    fetch("/api/factory/quota?days=14").then((r) => r.json()).then(setData).catch(() => {});
+    // Берём хвост побольше один раз, листаем на клиенте без перезагрузок.
+    fetch("/api/factory/quota?days=63").then((r) => r.json()).then(setData).catch(() => {});
   }, []);
 
   if (!data?.days?.length) return null;
   const { quota, days, summary } = data;
-  const week = days.slice(-7);
+
+  const end = days.length - page * 7;
+  const week = days.slice(Math.max(0, end - 7), end);
+  const older = end - 7 > 0;
+  const label = (d: string) =>
+    new Date(d + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 
   return (
     <div className="card">
@@ -35,14 +43,22 @@ export default function QuotaBoard() {
             день закрывается в 22:30 по Красноярску · заводской контент не считается
           </p>
         </div>
-        <div className="flex gap-2 text-xs">
+        <div className="flex items-center gap-2 text-xs">
           <span className="px-2.5 py-1 rounded-lg bg-green-50 text-green-800 border border-green-200">
-            выполнено {summary.ok} из {summary.workdays} дн
+            за 2 недели: {summary.ok} из {summary.workdays} дн
           </span>
           {summary.streak > 1 && (
             <span className="px-2.5 py-1 rounded-lg bg-orange-50 text-orange-800 border border-orange-200">
               🔥 серия: {summary.streak}
             </span>
+          )}
+          <button className="btn text-xs" disabled={!older} onClick={() => setPage(page + 1)}>←</button>
+          <span className="text-gray-500 whitespace-nowrap">
+            {week.length ? `${label(week[0].date)} — ${label(week[week.length - 1].date)}` : ""}
+          </span>
+          <button className="btn text-xs" disabled={page === 0} onClick={() => setPage(page - 1)}>→</button>
+          {page > 0 && (
+            <button className="btn text-xs" onClick={() => setPage(0)}>сегодня</button>
           )}
         </div>
       </div>

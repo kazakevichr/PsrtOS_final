@@ -66,7 +66,8 @@ export async function quotaDays(daysBack = 14) {
   return out;
 }
 
-export function summarize(days: any[]) {
+export function summarize(all: any[]) {
+  const days = all.slice(-14);
   const work = days.filter((d) => d.isWorkday && !d.isToday);
   const ok = work.filter((d) => d.status === "ok").length;
   let streak = 0;
