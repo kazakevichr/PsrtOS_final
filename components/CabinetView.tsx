@@ -3,6 +3,7 @@
 // Кабинет СММ по договорённостям от 25.08.2026: два потока нормы
 // (super.fit24 видео, Лео карусели), деньги по факту, доп задачи с ценами.
 import { useEffect, useState } from "react";
+import SmmPlan from "@/components/SmmPlan";
 
 const WD: Record<string, string> = {
   Mon: "пн", Tue: "вт", Wed: "ср", Thu: "чт", Fri: "пт", Sat: "сб", Sun: "вс",
@@ -175,6 +176,8 @@ export default function CabinetView() {
           </div>
         </div>
       )}
+      <SmmPlan />
+
     </div>
   );
 }
