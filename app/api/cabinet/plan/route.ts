@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 // Контент-план СММ: та же сетка, что у завода, но слоты свои и правит их
 // сама СММ (и владелец). Хранение общее — PlanSlot с префиксом smm:.
-export const SMM_SLOTS = [
+const SMM_SLOTS = [
   { slot: "smm:video:1", label: "🎬 Видео 1", active: true },
   { slot: "smm:video:2", label: "🎬 Видео 2", active: true },
   { slot: "smm:leo", label: "🎠 Лео · тема дня (4 карусели)", active: true },
