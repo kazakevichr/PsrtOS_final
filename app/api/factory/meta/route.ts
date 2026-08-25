@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     labeledBy: "factory",
     origin: String(b.origin || KIND_ORIGIN[b.kind] || b.kind || ""),
     topic: String(b.topic || "").slice(0, 120),
-    format: String(b.format || (b.kind === "carousel" ? "карусель" : "видео")),
+    format: String(b.format || (String(b.kind || "").startsWith("carousel") ? "карусель" : "видео")),
     hook: String(b.hook || ""),
     content: String(b.content || ""),
     cta: String(b.cta || ""),

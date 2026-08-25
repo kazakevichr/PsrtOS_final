@@ -152,7 +152,7 @@ export default function RouteMatrix({ canManage = true }: { canManage?: boolean 
                 return (
                   <td key={p.key} className="py-2 px-2 text-center">
                     {isNa ? (
-                      <span className="text-xs text-gray-400">{k.kind === "carousel" ? "не видео" : "—"}</span>
+                      <span className="text-xs text-gray-400">{k.kind.startsWith("carousel") ? "не видео" : "—"}</span>
                     ) : isLocked ? (
                       <span className="text-red-600" title="запрещено: авторские права">🔒</span>
                     ) : busy === `${p.key}|${k.kind}` ? (

@@ -12,7 +12,7 @@ export const PLATFORMS = [
 // Какие типы контента вообще осмысленны на профиле — раскладка Романа
 // от 25.08.2026. Всё вне списка в матрице показывается прочерком.
 export const RELEVANT: Record<string, string[]> = {
-  ig_main: ["make", "carousel", "avatar", "trainer:female", "trainer:male", "manual"],
+  ig_main: ["make", "carousel", "carousel_new", "avatar", "trainer:female", "trainer:male", "manual"],
   ig_woman: ["repost", "trainer:female"],
   ig_man: ["trainer:male", "repost"],
   youtube: ["make", "avatar", "trainer:female", "trainer:male", "repost", "manual"],
@@ -22,6 +22,7 @@ export const RELEVANT: Record<string, string[]> = {
 export const KINDS = [
   { kind: "make", label: "Персонаж", note: "" },
   { kind: "carousel", label: "Карусель", note: "" },
+  { kind: "carousel_new", label: "Карусель Новая", note: "фотореализм" },
   { kind: "avatar", label: "ИИ-аватар", note: "" },
   { kind: "trainer:female", label: "Тренер Ж", note: "" },
   { kind: "trainer:male", label: "Тренер М", note: "" },
@@ -32,7 +33,7 @@ export const KINDS = [
 // Клетки, которых не бывает: карусель — картинки (на видеоплощадках отдельная
 // подпись «не видео»), остальное — вне раскладки профилей.
 export const NA: Record<string, string[]> = {};
-for (const k of ["make", "carousel", "avatar", "trainer:female", "trainer:male", "repost", "manual"]) {
+for (const k of ["make", "carousel", "carousel_new", "avatar", "trainer:female", "trainer:male", "repost", "manual"]) {
   NA[k] = PLATFORMS.map((p) => p.key).filter((pk) => !(RELEVANT[pk] || []).includes(k));
 }
 
@@ -45,6 +46,7 @@ export const LOCKED: Record<string, string[]> = {
 const DEFAULTS: Record<string, Record<string, boolean>> = {
   make: { ig_main: true, ig_woman: false, youtube: true, tiktok: true },
   carousel: { ig_main: true, ig_woman: false },
+  carousel_new: { ig_main: true },
   avatar: { ig_main: true, ig_woman: false, youtube: true, tiktok: false },
   "trainer:female": { ig_main: false, ig_woman: false, youtube: false, tiktok: false },
   "trainer:male": { ig_main: false, ig_woman: false, youtube: false, tiktok: false },
@@ -88,11 +90,12 @@ export async function allowed(platform: string, kind: string) {
 // расписание с этим раз в несколько минут.
 import { prisma as _p } from "@/lib/prisma";
 
-export const SCHEDULABLE = ["make", "carousel", "avatar", "trainer:female", "trainer:male"];
+export const SCHEDULABLE = ["make", "carousel", "carousel_new", "avatar", "trainer:female", "trainer:male"];
 
 const SCHEDULE_DEFAULTS: Record<string, { mode: string; time?: string }> = {
   make: { mode: "time", time: "08:00" },
   carousel: { mode: "time", time: "12:00" },
+  carousel_new: { mode: "time", time: "12:00" },
   avatar: { mode: "demand" },
   "trainer:female": { mode: "demand" },
   "trainer:male": { mode: "demand" },

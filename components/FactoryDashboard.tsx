@@ -236,7 +236,7 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
 
           {stats.length > 0 && (
             <div className="card overflow-x-auto">
-              <h2 className="font-semibold mb-3">По типам контента<Hint text="Разрез заводских заказов за выбранный период по типу: make — Персонаж, carousel — Карусель, avatar — ИИ-аватар по запросу, trainer — тренерские клипы. Все эти типы производит завод; ручные публикации сюда не попадают." /></h2>
+              <h2 className="font-semibold mb-3">По типам контента<Hint text="Разрез заводских заказов за выбранный период по типу: make — Персонаж, carousel — Карусель, carousel_new — Карусель Новая (фотореализм), avatar — ИИ-аватар по запросу, trainer — тренерские клипы. Все эти типы производит завод; ручные публикации сюда не попадают." /></h2>
               <table className="w-full text-sm">
                 <thead><tr className="text-left text-gray-500">
                   <th className="py-1 pr-4">Тип</th><th className="py-1 pr-4">Всего</th>

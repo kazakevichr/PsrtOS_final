@@ -10,6 +10,7 @@ export const normLink = (u: string) =>
 export const KIND_ORIGIN: Record<string, string> = {
   make: "персонаж",
   carousel: "карусель завода",
+  carousel_new: "карусель новая",
   avatar: "ИИ-аватар",
   "trainer:female": "тренер Ж",
   "trainer:male": "тренер М",
@@ -61,7 +62,7 @@ export async function backfillFactoryMeta() {
           key, source: "factory", labeledBy: "factory",
           origin: KIND_ORIGIN[j.kind] || j.kind || "",
           topic: j.topic || "",
-          format: j.kind === "carousel" ? "карусель" : "видео",
+          format: (j.kind || "").startsWith("carousel") ? "карусель" : "видео",
           cta: word ? "кодовое слово" : "",
           ctaWord: word,
         },
