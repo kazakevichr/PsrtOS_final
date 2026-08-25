@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { approveSignup, askOwner, rejectSignup, sendTo, tgCall, ownerWithTg, webhookSecret, ROLE_NAME } from "@/lib/telegram";
 import { extractTask, looksLikeTask, resolveAssignee } from "@/lib/tgtasks";
+import { collabAdd, collabRemove, kratParts } from "@/lib/quota";
 
 export const dynamic = "force-dynamic";
 
@@ -141,6 +142,28 @@ async function onMessage(m: any) {
     return;
   }
 
+  // Коллаб в зачёт нормы: совместные посты не видны в API нашего аккаунта,
+  // поэтому СММ присылает ссылку сюда. Зачитывается видео в super.fit24.
+  const igLink = text.match(/https?:\/\/(?:www\.)?instagram\.com\/(?:p|reel)\/[A-Za-z0-9_-]+\/?/);
+  if (igLink && me && ["SMM", "OWNER"].includes(me.role)) {
+    const url = igLink[0];
+    const res = await collabAdd({ date: kratParts().date, url, rule: "main", by: me.name });
+    if (res === "dup") {
+      await sendTo(chatId, "Эта ссылка уже зачтена.");
+    } else {
+      await tgCall("sendMessage", {
+        chat_id: chatId, parse_mode: "HTML",
+        text: `✅ Зачтено: видео в норму super.fit24 за ${kratParts().date} (совместный пост).`,
+        reply_markup: { inline_keyboard: [[{ text: "↩️ Отменить зачёт", callback_data: `qx:${url.split("/").filter(Boolean).pop()}` }]] },
+      });
+      const owner = await ownerWithTg();
+      if (owner?.tgChatId && owner.tgChatId !== chatId) {
+        await sendTo(owner.tgChatId, `ℹ️ ${me.name} зачёл(ла) совместный пост в норму:\n${url}`);
+      }
+    }
+    return;
+  }
+
   if (text.startsWith("/me")) {
     await sendTo(
       chatId,
@@ -160,6 +183,21 @@ async function onCallback(q: any) {
   const data = String(q.data || "");
   const answer = (text: string) => tgCall("answerCallbackQuery", { callback_query_id: q.id, text });
   const [action, signupId, role] = data.split(":");
+
+  if (action === "qx") {
+    const presser = await prisma.user.findFirst({ where: { tgChatId: String(q.from?.id || "") } });
+    if (!presser || !["SMM", "OWNER"].includes(presser.role)) {
+      await answer("Отменить может СММ или владелец."); return;
+    }
+    await collabRemove(`https://www.instagram.com/p/${signupId}`);
+    await collabRemove(`https://www.instagram.com/reel/${signupId}`);
+    await answer("Зачёт отменён");
+    await tgCall("editMessageText", {
+      chat_id: chatId, message_id: q.message.message_id,
+      text: "↩️ Зачёт совместного поста отменён.",
+    });
+    return;
+  }
 
   // Кнопки задач: жать может только исполнитель или владелец — иначе любой
   // участник чата закрывал бы чужие задачи. Владелец узнаёт о каждой отметке

@@ -49,6 +49,39 @@ export function kratParts(d = new Date()) {
 
 export const isWorkday = (weekday: string) => weekday !== "Sun";
 
+// Совместные посты (коллабы): живут в аккаунте автора и в выдачу нашего
+// аккаунта через API не приходят. СММ присылает ссылку боту — зачёт руками,
+// записи лежат в Setting quota:collab.
+export type Collab = { date: string; url: string; rule: string; by?: string };
+
+export async function collabList(): Promise<Collab[]> {
+  const row = await prisma.setting.findUnique({ where: { key: "quota:collab" } });
+  try { return row ? JSON.parse(row.value) : []; } catch { return []; }
+}
+
+export async function collabAdd(c: Collab): Promise<"added" | "dup"> {
+  const list = await collabList();
+  const clean = (u: string) => u.split("?")[0].replace(/\/$/, "");
+  if (list.some((x) => clean(x.url) === clean(c.url))) return "dup";
+  list.push(c);
+  await prisma.setting.upsert({
+    where: { key: "quota:collab" },
+    create: { key: "quota:collab", value: JSON.stringify(list) },
+    update: { value: JSON.stringify(list) },
+  });
+  return "added";
+}
+
+export async function collabRemove(url: string) {
+  const clean = (u: string) => u.split("?")[0].replace(/\/$/, "");
+  const list = (await collabList()).filter((x) => clean(x.url) !== clean(url));
+  await prisma.setting.upsert({
+    where: { key: "quota:collab" },
+    create: { key: "quota:collab", value: JSON.stringify(list) },
+    update: { value: JSON.stringify(list) },
+  });
+}
+
 async function factoryLinkSet() {
   const links = new Set<string>();
   for (const j of await prisma.factoryJob.findMany({ select: { links: true } })) {
@@ -87,6 +120,13 @@ export async function quotaDays(daysBack = 63) {
         if (r.forbidden && k === r.forbidden) slot.bad++;
       }
     }
+  }
+
+  // Коллабы плюсуются к своему правилу за день отправки.
+  for (const c of await collabList()) {
+    const slot = (per[c.rule] ||= {});
+    const d = (slot[c.date] ||= { done: 0, bad: 0 });
+    d.done++;
   }
 
   const today = kratParts().date;
