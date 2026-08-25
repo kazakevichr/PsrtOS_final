@@ -4,12 +4,14 @@
 // паспорта, lead-gen по заявкам и рекомендации с судьбой.
 import { useEffect, useState } from "react";
 
+// Значки достоверности: плотная заливка + символ, чтобы различались
+// не только цветом.
 const conf = (n: number) =>
   n >= 8
-    ? { label: `вывод · ${n}`, cls: "bg-emerald-50 text-emerald-800" }
+    ? { label: `✓ вывод · ${n}`, cls: "bg-emerald-600 text-white" }
     : n >= 4
-      ? { label: `наблюдение · ${n}`, cls: "bg-amber-50 text-amber-800" }
-      : { label: `гипотеза · ${n}`, cls: "bg-red-50 text-red-800" };
+      ? { label: `~ наблюдение · ${n}`, cls: "bg-amber-500 text-white" }
+      : { label: `? гипотеза · ${n}`, cls: "bg-red-600 text-white" };
 
 function PostChips({ ids, posts }: { ids: string[]; posts: any[] }) {
   const found = ids.map((id) => posts.find((p) => p.id === id)).filter(Boolean);
@@ -89,9 +91,9 @@ export default function NeuroAnalytics({ isOwner }: { isOwner: boolean }) {
   if (!data) return <div className="p-6 text-gray-400">Загружаю…</div>;
   const ins = data.insight;
   const STATUS: Record<string, { label: string; cls: string }> = {
-    new: { label: "новая", cls: "bg-brand-50 text-brand-700" },
-    task: { label: "в работе у СММ", cls: "bg-amber-50 text-amber-800" },
-    done: { label: "внедрено", cls: "bg-emerald-50 text-emerald-800" },
+    new: { label: "● новая", cls: "bg-blue-600 text-white" },
+    task: { label: "◐ в работе у СММ", cls: "bg-amber-500 text-white" },
+    done: { label: "✓ внедрено", cls: "bg-emerald-600 text-white" },
   };
 
   return (
@@ -258,9 +260,9 @@ export default function NeuroAnalytics({ isOwner }: { isOwner: boolean }) {
       )}
 
       <p className="text-xs text-gray-400 flex gap-4 flex-wrap">
-        <span><span className="px-1.5 rounded-full bg-emerald-50 text-emerald-800">вывод</span> 8+ постов</span>
-        <span><span className="px-1.5 rounded-full bg-amber-50 text-amber-800">наблюдение</span> 4–7</span>
-        <span><span className="px-1.5 rounded-full bg-red-50 text-red-800">гипотеза</span> 1–3</span>
+        <span><span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white">✓ вывод</span> 8+ постов</span>
+        <span><span className="px-2 py-0.5 rounded-full bg-amber-500 text-white">~ наблюдение</span> 4–7</span>
+        <span><span className="px-2 py-0.5 rounded-full bg-red-600 text-white">? гипотеза</span> 1–3</span>
       </p>
     </div>
   );
