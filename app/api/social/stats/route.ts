@@ -28,6 +28,9 @@ export async function GET() {
   const accounts: any[] = [];
 
   for (const r of await prisma.igAccount.findMany({ orderBy: { username: "asc" } })) {
+    // Аккаунты Лео (business_discovery) — только для нормы СММ в кабинете:
+    // это партнёрские страницы, в общей аналитике соцсетей им не место.
+    if (r.igId.startsWith("bd:")) continue;
     const p = JSON.parse(r.profile);
     accounts.push({
       id: `ig-${r.igId}`,
