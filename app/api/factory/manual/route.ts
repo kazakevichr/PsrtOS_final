@@ -34,6 +34,9 @@ export async function GET(req: Request) {
 
   const rows: any[] = [];
   for (const acc of await prisma.igAccount.findMany()) {
+    // Партнёрские страницы Лео (business_discovery) — не наша ручная работа:
+    // они живут только в норме СММ.
+    if (acc.igId.startsWith("bd:")) continue;
     const media: any[] = JSON.parse(acc.media);
     for (const m of media) {
       if (!m.timestamp || m.timestamp < edge) continue;
