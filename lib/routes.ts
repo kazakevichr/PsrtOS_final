@@ -27,7 +27,7 @@ export const KINDS = [
   { kind: "trainer:female", label: "Тренер Ж", note: "" },
   { kind: "trainer:male", label: "Тренер М", note: "" },
   { kind: "repost", label: "Нарезки", note: "ютуб-репост" },
-  { kind: "manual", label: "Ручные из бота", note: "" },
+  { kind: "manual", label: "Ручные посты", note: "зеркало на видеоплощадки" },
 ];
 
 // Клетки, которых не бывает: карусель — картинки (на видеоплощадках отдельная
