@@ -72,6 +72,17 @@ async function upsertChannel(platform: string, key: string, profile: any, snap: 
   history.push(snap);
   history = history.slice(-365);
   const media = mergeMedia(row ? JSON.parse(row.media) : [], fresh);
+  // Счётчик канала YouTube (channels.statistics.viewCount) отстаёт от жизни
+  // до суток, аповидеошная статистика свежая: во время всплеска канал
+  // «терял» тысячи просмотров (исп. канал: счётчик 6.5k при 20.7k по
+  // роликам). Берём максимум из двух — свежее и не занижает.
+  if (platform === "yt") {
+    const sumVideos = media.reduce((acc: number, m: any) => acc + (m.views || 0), 0);
+    snap.views = Math.max(snap.views || 0, sumVideos);
+    if (profile && typeof profile === "object") {
+      profile.totalViews = Math.max(profile.totalViews || 0, sumVideos);
+    }
+  }
   const fields = {
     profile: JSON.stringify(profile),
     history: JSON.stringify(history),
