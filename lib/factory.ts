@@ -1,9 +1,27 @@
-// Слоты конвейера контент-завода и их часы выдачи (МСК).
-// Замороженные слоты завод не спрашивает по расписанию — только кнопкой.
-export const SLOTS = [
-  { slot: "make", label: "Персонаж", time: "08:00", active: true },
-  { slot: "carousel", label: "Карусель", time: "12:00", active: true },
-  { slot: "trainer:female", label: "Тренер Ж", time: "17:00", active: true },
-  { slot: "trainer:male", label: "Тренер М", time: "—", active: false },
-  { slot: "avatar", label: "ИИ-аватар", time: "—", active: false },
+// Слоты контент-плана завода. Активность и время больше не зашиты в код:
+// слот жив, когда его тип в матрице стоит «по времени», и заморожен, когда
+// «по запросу», — переключение в маршрутах сразу меняет план и генерацию.
+import { scheduleMap } from "@/lib/routes";
+
+// Все производимые типы, кроме нарезок (чужой контент, темы не планируются)
+// и ручных постов (их темы рождаются вне завода).
+const PLAN_KINDS = [
+  { slot: "make", label: "Персонаж" },
+  { slot: "carousel", label: "Карусель" },
+  { slot: "carousel_new", label: "Карусель Новая" },
+  { slot: "trainer:female", label: "Тренер Ж" },
+  { slot: "trainer:male", label: "Тренер М" },
+  { slot: "avatar", label: "ИИ-аватар" },
 ];
+
+export async function planSlots() {
+  const sched = await scheduleMap();
+  return PLAN_KINDS.map((k) => {
+    const s = sched[k.slot] || { mode: "demand" };
+    return {
+      ...k,
+      active: s.mode === "time",
+      time: s.mode === "time" ? s.time || "—" : "—",
+    };
+  });
+}

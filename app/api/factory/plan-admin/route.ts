@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-import { SLOTS } from "@/lib/factory";
+import { planSlots } from "@/lib/factory";
 
 async function owner() {
   const session = await getServerSession(authOptions);
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
   if (!(await viewer())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const month = new URL(req.url).searchParams.get("month") || new Date().toISOString().slice(0, 7);
   const rows = await prisma.planSlot.findMany({ where: { date: { startsWith: month } } });
-  return NextResponse.json({ month, slots: SLOTS, dates: monthDates(month), plan: rows });
+  return NextResponse.json({ month, slots: await planSlots(), dates: monthDates(month), plan: rows });
 }
 
 export async function PUT(req: Request) {
@@ -55,8 +55,9 @@ export async function POST(req: Request) {
   const existing = await prisma.planSlot.findMany({ where: { date: { startsWith: month } } });
   const filled = new Set(existing.filter((r) => r.topic.trim()).map((r) => `${r.date}|${r.slot}`));
   const need: { date: string; slot: string }[] = [];
+  const slots = await planSlots();
   for (const date of monthDates(month)) {
-    for (const s of SLOTS.filter((s) => s.active)) {
+    for (const s of slots.filter((s) => s.active)) {
       if (!filled.has(`${date}|${s.slot}`)) need.push({ date, slot: s.slot });
     }
   }
@@ -68,6 +69,9 @@ export async function POST(req: Request) {
     make: "мультяшный ролик с персонажем; тема СТРОГО из тематик четырёх гайдов Базы знаний: БАДы (креатин, омега-3, витамин D, магний, протеин), тренировки для новичка (техника, разминка, восстановление, прогрессия), гормоны (кортизол, инсулин, щитовидка, сон), анализы (ферритин, дефициты, чек-ап). Темы вне этих четырёх зон запрещены",
     carousel: "питание для похудения: готовый рацион на день или неделю с КБЖУ, меню при дефиците калорий («Рацион на день: 1500 ккал с КБЖУ», «Меню на неделю без срывов»). Только рационы/меню с конкретными калориями — НЕ тренировки",
     "trainer:female": "тренировка на конкретную мышечную группу для женщин — тема СТРОГО в формате «тренировка на <группу>» (ягодицы, пресс, спина, ноги, плечи, руки, грудь, всё тело), Тренер собирает ролик из справочника упражнений по этой группе",
+    "trainer:male": "тренировка на конкретную мышечную группу для мужчин — тема СТРОГО в формате «тренировка на <группу>» (грудь, спина, ноги, плечи, руки, пресс, всё тело), ролик собирается из справочника упражнений",
+    carousel_new: "фотореалистичная карусель про домашние тренировки и полезные привычки: конкретная практика («5 упражнений на утро без инвентаря», «Разминка за 3 минуты») — без рационов, это зона обычной Карусели",
+    avatar: "ролик с ИИ-аватаром: экспертная подача — разбор мифа, ответ на частый вопрос новичка, короткий ликбез по тренировкам/питанию/добавкам",
   };
   const prompt = `Ты контент-стратег фитнес-бренда SUPERFIT24 (приложение с тренировками и питанием, аудитория — русскоязычные новички и любители). Составь темы контента.
 Для каждой строки входа дай тему (topic, до 90 символов, без кавычек и хэштегов) и 2-3 конкретных факта/тезиса для сценариста (facts, до 300 символов).
