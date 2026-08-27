@@ -60,14 +60,53 @@ const DEFAULTS: Record<string, Record<string, boolean>> = {
 // от базового repost.
 export const baseKind = (k: string) => (k.startsWith("repost:") ? "repost" : k);
 
-export async function donors(): Promise<{ key: string; label: string }[]> {
+export async function donors(): Promise<{ key: string; label: string; manual?: boolean }[]> {
   const row = await prisma.setting.findUnique({ where: { key: "repost:donors" } });
   try {
     const list = row ? JSON.parse(row.value) : [];
     return Array.isArray(list)
-      ? list.filter((d) => d?.key).map((d) => ({ key: String(d.key), label: String(d.label || d.key) }))
+      ? list.filter((d) => d?.key).map((d) => ({
+          key: String(d.key), label: String(d.label || d.key),
+          ...(d.manual ? { manual: true } : {}),
+        }))
       : [];
   } catch { return []; }
+}
+
+// Время публикации нарезок. У заводских типов расписание — это старт
+// производства; нарезки же собираются по событию (донор выложил ролик),
+// поэтому час у них отдельной осью: когда выпускать уже готовое.
+// Хранится отдельно от списка доноров, чтобы перерегистрация доноров
+// заводом не стирала выставленные часы.
+export type PublishRule = { mode: "now" | "at"; at?: string };
+
+export async function publishMap(): Promise<Record<string, PublishRule>> {
+  const row = await prisma.setting.findUnique({ where: { key: "repost:publish" } });
+  try { return row ? JSON.parse(row.value) : {}; } catch { return {}; }
+}
+
+export async function setPublish(kind: string, mode: string, at?: string) {
+  if (!kind.startsWith("repost:")) throw new Error("время публикации задаётся только нарезкам");
+  if (!["now", "at"].includes(mode)) throw new Error("mode: now | at");
+  if (mode === "at" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(at || "")) {
+    throw new Error("время в формате ЧЧ:ММ");
+  }
+  const map = await publishMap();
+  map[kind] = mode === "at" ? { mode: "at", at } : { mode: "now" };
+  await prisma.setting.upsert({
+    where: { key: "repost:publish" },
+    create: { key: "repost:publish", value: JSON.stringify(map) },
+    update: { value: JSON.stringify(map) },
+  });
+  return map;
+}
+
+// Для завода: не задано — публикуем сразу, как было до появления часов.
+export async function publishFor(kind: string) {
+  const r = (await publishMap())[kind];
+  return r?.mode === "at" && r.at
+    ? { publish_mode: "at", publish_at: r.at }
+    : { publish_mode: "now", publish_at: null };
 }
 
 // Типы для матрицы: при известных донорах строка «Нарезки» раскрывается
@@ -78,7 +117,13 @@ export async function kindsWithDonors() {
   const out: { kind: string; label: string; note: string }[] = [];
   for (const k of KINDS) {
     if (k.kind !== "repost") { out.push(k); continue; }
-    for (const d of ds) out.push({ kind: `repost:${d.key}`, label: `Нарезки · ${d.label}`, note: "ютуб-репост" });
+    for (const d of ds) {
+      out.push({
+        kind: `repost:${d.key}`,
+        label: `Нарезки · ${d.label}`,
+        note: d.manual ? "выкладка руками" : "ютуб-репост",
+      });
+    }
   }
   return out;
 }

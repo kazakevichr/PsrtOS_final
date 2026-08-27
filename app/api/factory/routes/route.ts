@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { LOCKED, NA, PLATFORMS, SCHEDULABLE, allowed, baseKind, blocked, kindsWithDonors, routeMap, scheduleMap, setSchedule } from "@/lib/routes";
+import { LOCKED, NA, PLATFORMS, SCHEDULABLE, allowed, baseKind, blocked, kindsWithDonors, publishFor, publishMap, routeMap, scheduleMap, setPublish, setSchedule } from "@/lib/routes";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   if (platform && kind) {
-    return NextResponse.json({ platform, kind, allowed: await allowed(platform, kind) });
+    // Заводу вместе с разрешением отдаём время публикации: нарезки могут
+    // собираться сразу, а выходить в назначенный час.
+    return NextResponse.json({
+      platform, kind,
+      allowed: await allowed(platform, kind),
+      ...(await publishFor(kind)),
+    });
   }
   // na/locked раздаются по фактическим типам (донорские наследуют базовый
   // repost) — интерфейсу не нужно знать про деление.
@@ -41,6 +47,7 @@ export async function GET(req: Request) {
     schedulable: SCHEDULABLE,
     flags: await routeMap(),
     schedule: await scheduleMap(),
+    publish: await publishMap(),
   });
 }
 
@@ -55,6 +62,15 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
     return NextResponse.json({ ok: true, schedule: await scheduleMap() });
+  }
+  // Время публикации нарезок: {kind: "repost:<донор>", publish: {mode, at}}
+  if (b?.kind && b?.publish) {
+    try {
+      const publish = await setPublish(b.kind, b.publish.mode, b.publish.at);
+      return NextResponse.json({ ok: true, publish });
+    } catch (e: any) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
   }
   if (!b?.platform || !b?.kind || typeof b.enabled !== "boolean") {
     return NextResponse.json({ error: "нужны platform, kind, enabled" }, { status: 400 });

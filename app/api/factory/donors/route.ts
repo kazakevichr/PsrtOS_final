@@ -17,7 +17,13 @@ export async function POST(req: Request) {
   }
   const list = b.donors
     .filter((d: any) => d?.key && /^[a-z0-9_-]{2,30}$/.test(String(d.key)))
-    .map((d: any) => ({ key: String(d.key), label: String(d.label || d.key).slice(0, 40) }));
+    .map((d: any) => ({
+      key: String(d.key),
+      label: String(d.label || d.key).slice(0, 40),
+      // manual — донора выкладывает человек: время публикации в матрице
+      // показываем, но помечаем, что применит его не завод.
+      ...(d.manual ? { manual: true } : {}),
+    }));
   await prisma.setting.upsert({
     where: { key: "repost:donors" },
     create: { key: "repost:donors", value: JSON.stringify(list) },

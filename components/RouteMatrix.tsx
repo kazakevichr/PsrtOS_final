@@ -35,6 +35,22 @@ export default function RouteMatrix({ canManage = true }: { canManage?: boolean 
     setBusy("");
   }
 
+  // Время публикации нарезок: собираем сразу, выпускаем в назначенный час.
+  async function setPublish(kind: string, mode: string, at?: string) {
+    if (!canManage) return;
+    setBusy(`pub|${kind}`);
+    setNote("");
+    const r = await fetch("/api/factory/routes", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kind, publish: { mode, at } }),
+    });
+    const j = await r.json();
+    if (j.publish) setData((d: any) => ({ ...d, publish: j.publish }));
+    else setNote(j.error || "не получилось");
+    setBusy("");
+  }
+
   async function toggle(platform: string, kind: string, next: boolean) {
     if (!canManage) return;
     setBusy(`${platform}|${kind}`);
@@ -51,7 +67,7 @@ export default function RouteMatrix({ canManage = true }: { canManage?: boolean 
   }
 
   if (!data) return null;
-  const { platforms, kinds, na, locked, flags, schedule = {}, schedulable = [] } = data;
+  const { platforms, kinds, na, locked, flags, schedule = {}, schedulable = [], publish = {} } = data;
   const showPlatforms = profile === "all" ? platforms : platforms.filter((p: any) => p.key === profile);
   const showKinds = profile === "all"
     ? kinds
@@ -137,6 +153,47 @@ export default function RouteMatrix({ canManage = true }: { canManage?: boolean 
                             className="text-xs border rounded-md px-1 py-0.5 bg-white text-gray-600 w-[74px]"
                             title="Время старта производства, МСК. Завод проверяет расписание раз в час, поэтому минуты округляются к началу часа."
                           />
+                        )}
+                      </span>
+                    )
+                  ) : k.kind.startsWith("repost:") ? (
+                    busy === `pub|${k.kind}` ? (
+                      <span className="text-xs text-gray-400">…</span>
+                    ) : (
+                      <span className="flex items-center gap-1">
+                        <select
+                          disabled={!canManage}
+                          value={publish[k.kind]?.mode || "now"}
+                          onChange={(e) =>
+                            setPublish(k.kind, e.target.value,
+                              e.target.value === "at" ? publish[k.kind]?.at || "12:00" : undefined)
+                          }
+                          className="text-xs border rounded-md px-1 py-0.5 bg-white text-gray-600"
+                          title="Ролик собирается сразу, как донор его выложил. Здесь — когда он выйдет в аккаунт."
+                        >
+                          <option value="now">сразу</option>
+                          <option value="at">по времени</option>
+                        </select>
+                        {publish[k.kind]?.mode === "at" && (
+                          <input
+                            type="time"
+                            disabled={!canManage}
+                            defaultValue={publish[k.kind]?.at || "12:00"}
+                            onBlur={(e) => e.target.value && e.target.value !== publish[k.kind]?.at &&
+                              setPublish(k.kind, "at", e.target.value)}
+                            className="text-xs border rounded-md px-1 py-0.5 bg-white text-gray-600 w-[74px]"
+                            title="Время выхода ролика, МСК."
+                          />
+                        )}
+                        {k.note && (
+                          <span
+                            className="text-gray-400 text-xs"
+                            title={k.note === "выкладка руками"
+                              ? "Этого донора выкладывает человек — время сработает после подключения аккаунта к API."
+                              : ""}
+                          >
+                            · {k.note}
+                          </span>
                         )}
                       </span>
                     )
