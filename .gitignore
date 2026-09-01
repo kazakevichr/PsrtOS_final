@@ -3,6 +3,9 @@ node_modules/
 .env.local
 dev.db
 dev.db-journal
+# песочница для локальной проверки: своя база, чтобы не трогать dev.db
+test.db
+test.db-journal
 .next/
 tsconfig.tsbuildinfo
 .DS_Store

@@ -6,25 +6,26 @@ datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
+
 model User {
   id           String   @id @default(cuid())
   name         String
   email        String   @unique
   passwordHash String
-  role         String     @default("MANAGER")
+  role         String   @default("MANAGER")
   fixedSalary  Float    @default(15000)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
 
   // Телеграм: chatId появляется после привязки профиля через бота,
   // tgLinkCode — одноразовый код в ссылке t.me/...?start=<code>.
-  tgChatId     String?  @unique
-  tgUsername   String?
-  tgLinkCode   String?  @unique
+  tgChatId   String? @unique
+  tgUsername String?
+  tgLinkCode String? @unique
 
-  partners     Partner[]      @relation("ResponsibleUser")
-  tasks        Task[]         @relation("AssignedUser")
-  transactions Transaction[]  @relation("CreatedByUser")
+  partners     Partner[]       @relation("ResponsibleUser")
+  tasks        Task[]          @relation("AssignedUser")
+  transactions Transaction[]   @relation("CreatedByUser")
   comments     Comment[]
   stageChanges StageHistory[]
   payrolls     PayrollRecord[]
@@ -58,36 +59,36 @@ model Project {
 }
 
 model PartnerType {
-  id        String  @id @default(cuid())
+  id        String    @id @default(cuid())
   projectId String
   name      String
   kpiAmount Float
-  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   partners  Partner[]
 }
 
 model Partner {
-  id                 String        @id @default(cuid())
-  projectId          String
-  partnerTypeId      String?
-  name               String
-  instagram          String?
-  telegram           String?
-  phone              String?
-  responsibleUserId  String
-  stage              String
-    status             String        @default("ACTIVE")
-  firstContactDate   DateTime?
-  connectedDate      DateTime?
-  firstSaleDate      DateTime?
-  lastSaleDate       DateTime?
-  kpiPaid            Boolean       @default(false)
-  lostReason         String?
-  lostAt             DateTime?
-  retryReminderDate  DateTime?
-  adCreativeUrl      String?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  id                String    @id @default(cuid())
+  projectId         String
+  partnerTypeId     String?
+  name              String
+  instagram         String?
+  telegram          String?
+  phone             String?
+  responsibleUserId String
+  stage             String
+  status            String    @default("ACTIVE")
+  firstContactDate  DateTime?
+  connectedDate     DateTime?
+  firstSaleDate     DateTime?
+  lastSaleDate      DateTime?
+  kpiPaid           Boolean   @default(false)
+  lostReason        String?
+  lostAt            DateTime?
+  retryReminderDate DateTime?
+  adCreativeUrl     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   project      Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   partnerType  PartnerType?   @relation(fields: [partnerTypeId], references: [id])
@@ -99,12 +100,12 @@ model Partner {
 }
 
 model StageHistory {
-  id            String   @id @default(cuid())
-  partnerId     String
-  fromStage     String?
-  toStage       String
+  id              String   @id @default(cuid())
+  partnerId       String
+  fromStage       String?
+  toStage         String
   changedByUserId String
-  changedAt     DateTime @default(now())
+  changedAt       DateTime @default(now())
 
   partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
   changedBy User    @relation(fields: [changedByUserId], references: [id])
@@ -158,7 +159,7 @@ model Comment {
 }
 
 model PayrollRecord {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
   month       String
   fixedAmount Float
@@ -166,7 +167,7 @@ model PayrollRecord {
   bonusTotal  Float
   totalAmount Float
   paidAt      DateTime?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id])
 
@@ -302,7 +303,7 @@ model RouteFlag {
 // Мелкие служебные отметки, которые должны переживать перезапуск контейнера:
 // например, какого числа уже отправлены утренние напоминания по задачам.
 model Setting {
-  key   String @id
+  key   String   @id
   value String
   at    DateTime @updatedAt
 }
@@ -311,23 +312,23 @@ model Setting {
 // Заводские посты размечает сам завод (labeledBy=factory), ручные —
 // нейросеть по описанию (labeledBy=ai).
 model ContentMeta {
-  key       String   @id // нормализованный permalink без протокола
-  platform  String   @default("instagram")
-  source    String   @default("manual") // factory | manual
-  format    String   @default("") // видео | карусель | фото
-  origin    String   @default("") // персонаж | карусель завода | тренер Ж | ИИ-аватар | тренер М | нарезка | ручной
-  topic     String   @default("")
-  hook      String   @default("") // вопрос | боль | цифра | до-после | интрига | нет
-  content   String   @default("") // практика | анонс | лайфстайл | продажа
-  cta       String   @default("") // кодовое слово | ссылка | подписка | нет
-  visual    String   @default("") // что в кадре: тренировка в зале | говорит в камеру | еда | ...
-  ctaVideo  String   @default("") // призыв внутри ролика: кодовое слово | подписка | ссылка | нет
-  ctaWord   String   @default("") // само кодовое слово, если есть
-  leads     Int      @default(-1) // заявки: комментарии с кодовым словом (-1 — не считали)
+  key       String    @id // нормализованный permalink без протокола
+  platform  String    @default("instagram")
+  source    String    @default("manual") // factory | manual
+  format    String    @default("") // видео | карусель | фото
+  origin    String    @default("") // персонаж | карусель завода | тренер Ж | ИИ-аватар | тренер М | нарезка | ручной
+  topic     String    @default("")
+  hook      String    @default("") // вопрос | боль | цифра | до-после | интрига | нет
+  content   String    @default("") // практика | анонс | лайфстайл | продажа
+  cta       String    @default("") // кодовое слово | ссылка | подписка | нет
+  visual    String    @default("") // что в кадре: тренировка в зале | говорит в камеру | еда | ...
+  ctaVideo  String    @default("") // призыв внутри ролика: кодовое слово | подписка | ссылка | нет
+  ctaWord   String    @default("") // само кодовое слово, если есть
+  leads     Int       @default(-1) // заявки: комментарии с кодовым словом (-1 — не считали)
   leadsAt   DateTime?
-  labeledBy String   @default("") // factory | ai
-  at        DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  labeledBy String    @default("") // factory | ai
+  at        DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 }
 
 // Рекомендация нейро-аналитики: живёт между анализами, чтобы отслеживать
@@ -342,4 +343,45 @@ model Recommendation {
   effect    String    @default("")
   createdAt DateTime  @default(now())
   doneAt    DateTime?
+}
+
+// Кошелёк платного сервиса завода. Первого сентября 2026 производство встало
+// на четыре дня: на роутере кончились деньги, а узнать об этом было неоткуда —
+// завод сообщал, что виновата тема. Раздел «Кошельки» закрывает именно это.
+//
+// Две половины в одной строке, и это намеренно. Что сервис отдаёт по API,
+// присылает завод раз в час (ok/left/spent). Чего сервис не отдаёт —
+// вносит человек (manual, пополнения ниже). Остаток роутера, OpenAI и fal
+// по API не читается вовсе: у роутера есть только «потрачено всего», у
+// OpenAI и fal нет и этого. Поэтому «сколько осталось» = пополнения − расход,
+// и без ручного ввода эта цифра не появится ниоткуда.
+model Wallet {
+  service   String    @id // router | openai | eleven | heygen | fal
+  title     String    @default("")
+  ok        Boolean   @default(true) // можно ли платить прямо сейчас
+  low       Boolean   @default(false) // на исходе
+  left      Float? // остаток, если сервис его отдаёт
+  unit      String    @default("") // в чём остаток: $, секунды, символы
+  spent     Float? // потрачено всего, если сервис считает
+  note      String    @default("") // человеческая причина
+  link      String    @default("") // кабинет: зайти и проверить руками
+  manual    Float? // остаток, вписанный человеком
+  manualAt  DateTime?
+  state     String    @default("") // ok | low | down — чтобы пушить на СМЕНУ
+  at        DateTime? // когда завод присылал замер
+  updatedAt DateTime  @updatedAt
+}
+
+// Пополнение: когда, сколько и кто. Отсюда считается остаток тех сервисов,
+// которые его не отдают. Отдельной таблицей, а не полем: важна история —
+// «когда пополнял и сколько» человек спрашивает чаще, чем текущий остаток.
+model WalletTopup {
+  id      Int      @id @default(autoincrement())
+  service String
+  amount  Float // в долларах
+  at      DateTime @default(now())
+  who     String   @default("")
+  note    String   @default("")
+
+  @@index([service, at])
 }

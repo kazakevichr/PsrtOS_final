@@ -4,6 +4,7 @@
 // тем LLM) и статистика производства из журнала событий завода.
 import { useEffect, useMemo, useState } from "react";
 import RouteMatrix from "@/components/RouteMatrix";
+import WalletsBoard from "@/components/WalletsBoard";
 import QuotaBoard from "@/components/QuotaBoard";
 
 const fmt = (n: any) => (n == null ? "—" : Number(n).toLocaleString("ru-RU"));
@@ -43,7 +44,7 @@ function monthShift(month: string, delta: number) {
 }
 
 export default function FactoryDashboard({ canManage = true }: { canManage?: boolean }) {
-  const [tab, setTab] = useState<"plan" | "stats">("plan");
+  const [tab, setTab] = useState<"plan" | "stats" | "money">("plan");
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [plan, setPlan] = useState<any>(null);
   const [jobs, setJobs] = useState<any[]>([]);
@@ -163,9 +164,14 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
           <button className={`px-3 py-1.5 rounded-lg text-sm ${tab === "stats" ? "bg-brand-600 text-white" : "bg-white border hover:bg-gray-50"}`} onClick={() => setTab("stats")}>
             Статистика
           </button>
+          <button className={`px-3 py-1.5 rounded-lg text-sm ${tab === "money" ? "bg-brand-600 text-white" : "bg-white border hover:bg-gray-50"}`} onClick={() => setTab("money")}>
+            Кошельки
+          </button>
         </div>
       </div>
       {note && <p className="text-sm text-gray-500">{note}</p>}
+
+      {tab === "money" && <WalletsBoard canManage={canManage} />}
 
       {tab === "plan" && <RouteMatrix canManage={canManage} />}
 
