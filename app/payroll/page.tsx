@@ -3,7 +3,9 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { computePayroll, resolvePeriod, PeriodType } from "@/lib/economics";
+import { earnings } from "@/lib/quota";
 import PeriodFilter from "@/components/PeriodFilter";
+import PayrollEntry from "@/components/PayrollEntry";
 
 export default async function PayrollPage({
   searchParams,
@@ -28,6 +30,18 @@ export default async function PayrollPage({
 
   const payrolls = await Promise.all(userIds.map((id) => computePayroll(id, period)));
   const grandTotal = payrolls.reduce((s, p) => s + p.totalAmount, 0);
+
+  // Начисление заводится руками и только помесячно: это то, что уходит в
+  // расходы «Бухгалтерии». Посчитанное показываем рядом как подсказку —
+  // у СММ она приходит из кабинета, у менеджеров из формулы выше.
+  const canEnter = isOwner && periodType === "month";
+  const records = canEnter
+    ? await prisma.payrollRecord.findMany({ where: { month: period.label } })
+    : [];
+  const recordBy = new Map(records.map((r) => [r.userId, r]));
+  const smmEarned = canEnter ? await earnings(period.label) : null;
+  const hintFor = (userId: string, computed: number) =>
+    smmEarned?.smm?.id === userId ? smmEarned.base + smmEarned.extrasEarned : computed;
 
   return (
     <div>
@@ -85,6 +99,19 @@ export default async function PayrollPage({
                   </div>
                 ))}
               </div>
+            )}
+            {canEnter && (
+              <PayrollEntry
+                userId={p.userId}
+                month={period.label}
+                computed={hintFor(p.userId, p.totalAmount)}
+                record={(() => {
+                  const r = recordBy.get(p.userId);
+                  return r
+                    ? { id: r.id, totalAmount: r.totalAmount, paidAt: r.paidAt ? r.paidAt.toISOString() : null }
+                    : null;
+                })()}
+              />
             )}
           </div>
         ))}

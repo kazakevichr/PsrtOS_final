@@ -67,6 +67,7 @@ export default async function Navbar() {
     navLink("/", "Дашборд"),
     navLink("/settings/users", "Сотрудники"),
     navLink("/payroll", "Зарплата"),
+    navLink("/economics", "Бухгалтерия"),
     navLink("/settings/projects", "Настройки"),
   ];
 

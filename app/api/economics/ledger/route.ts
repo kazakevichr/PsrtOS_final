@@ -1,0 +1,51 @@
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+
+const CATEGORIES = ["реклама", "сервис", "прочее", "продажи"];
+
+export async function POST(req: Request) {
+  const s = await getServerSession(authOptions);
+  if (!s || s.user.role !== "OWNER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const b = await req.json();
+  const amount = Number(b.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return NextResponse.json({ error: "Укажите сумму больше нуля" }, { status: 400 });
+  }
+  if (!String(b.title || "").trim()) {
+    return NextResponse.json({ error: "Напишите, за что деньги" }, { status: 400 });
+  }
+  const date = b.date ? new Date(`${b.date}T12:00:00Z`) : new Date();
+  if (Number.isNaN(date.getTime())) {
+    return NextResponse.json({ error: "Дата не разобралась" }, { status: 400 });
+  }
+  const entry = await prisma.ledger.create({
+    data: {
+      kind: b.kind === "in" ? "in" : "out",
+      date,
+      category: CATEGORIES.includes(b.category) ? b.category : "прочее",
+      title: String(b.title).trim(),
+      amount,
+      currency: b.currency === "USD" ? "USD" : "RUB",
+      note: String(b.note || "").trim(),
+      byUserId: s.user.id,
+    },
+  });
+  return NextResponse.json(entry);
+}
+
+export async function DELETE(req: Request) {
+  const s = await getServerSession(authOptions);
+  if (!s || s.user.role !== "OWNER") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  const id = new URL(req.url).searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "Нет id" }, { status: 400 });
+  await prisma.ledger.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}

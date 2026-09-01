@@ -6,6 +6,10 @@ body {
     background-color: #f5f6fa;
 }
 
+/* Компонентные классы живут в слое components: иначе .input со своим w-full
+   перебивает утилиту w-28 просто потому, что объявлен ниже по файлу, и любое
+   узкое поле растягивается на всю строку. */
+@layer components {
 .card {
     @apply bg-white rounded-xl shadow-sm border border-gray-200 p-4;
 }
@@ -25,3 +29,4 @@ body {
 .badge-green { @apply bg-green-100 text-green-800 px-2 py-0.5 rounded-full text-xs font-medium; }
 .badge-yellow { @apply bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full text-xs font-medium; }
 .badge-red { @apply bg-red-100 text-red-800 px-2 py-0.5 rounded-full text-xs font-medium; }
+}

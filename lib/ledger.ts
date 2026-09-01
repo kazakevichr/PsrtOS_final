@@ -1,0 +1,246 @@
+import { prisma } from "@/lib/prisma";
+
+// Бухгалтерия: доходы, расходы и метрики эффективности за календарный месяц.
+//
+// Метод кассовый (решение Романа 01.09): считаем только то, что реально
+// принесло деньги, и то, куда и когда они ушли. Отсюда два следствия,
+// которые легко нарушить по невнимательности:
+//
+//  1. Смета заказов завода (FactoryJob.cost) — это оценка, а не деньги.
+//     В расход идут пополнения кошельков, они же реальные списания.
+//     Сметы остаются метрикой себестоимости и сверкой «залили ↔ сожгли».
+//
+//  2. Доля партнёра вычитается ещё внутри ownerProfitAmount. Если записать
+//     партнёрские выплаты в расходы, они посчитаются дважды. Поэтому верх
+//     отчёта — выручка компании, а оборот показывается рядом справочно.
+
+export const FX_KEY = "fx:usd";
+const FX_DEFAULT = 90;
+
+/** Курс доллара: вводится руками, до ввода берётся значение по умолчанию. */
+export async function fxUsd(): Promise<number> {
+  const row = await prisma.setting.findUnique({ where: { key: FX_KEY } });
+  const n = Number(row?.value);
+  return Number.isFinite(n) && n > 0 ? n : FX_DEFAULT;
+}
+
+export function monthBounds(ym: string) {
+  const [y, m] = ym.split("-").map(Number);
+  return { start: new Date(Date.UTC(y, m - 1, 1)), end: new Date(Date.UTC(y, m, 1)) };
+}
+
+export const isMonth = (s: string) => /^\d{4}-\d{2}$/.test(s);
+
+/** Приводим запись к рублям: в журнале можно вести и долларовые траты. */
+const toRub = (amount: number, currency: string, fx: number) =>
+  currency === "USD" ? amount * fx : amount;
+
+const round = (n: number) => Math.round(n);
+
+export type CostRow = {
+  key: string;
+  label: string;
+  amount: number;
+  source: string;   // откуда цифра — чтобы не гадать, почему столько
+  manual: boolean;  // вводится руками или считается сама
+};
+
+/** Полная картина месяца: приход, расход, прибыль и юнит-метрики. */
+export async function monthMoney(ym: string) {
+  const { start, end } = monthBounds(ym);
+  const fx = await fxUsd();
+
+  const [txs, ledger, payrollAccrued, payrollPaid, topups, recurring, jobs, newPartners] =
+    await Promise.all([
+      prisma.transaction.findMany({
+        where: { date: { gte: start, lt: end } },
+        select: { revenueAmount: true, ownerProfitAmount: true },
+      }),
+      prisma.ledger.findMany({
+        where: { date: { gte: start, lt: end } },
+        orderBy: { date: "desc" },
+      }),
+      prisma.payrollRecord.findMany({
+        where: { month: ym },
+        include: { user: { select: { name: true } } },
+      }),
+      prisma.payrollRecord.findMany({
+        where: { paidAt: { gte: start, lt: end } },
+        include: { user: { select: { name: true } } },
+      }),
+      prisma.walletTopup.findMany({ where: { at: { gte: start, lt: end } } }),
+      prisma.recurringCost.findMany({
+        where: { fromMonth: { lte: ym }, OR: [{ toMonth: null }, { toMonth: { gte: ym } }] },
+        orderBy: { amount: "desc" },
+      }),
+      prisma.factoryJob.findMany({
+        where: { date: { startsWith: ym }, cost: { gt: 0 } },
+        select: { cost: true },
+      }),
+      prisma.partner.findMany({
+        where: { connectedDate: { gte: start, lt: end } },
+        include: { partnerType: true, project: true },
+      }),
+    ]);
+
+  // ── Доходы ────────────────────────────────────────────────────────────
+  const turnover = txs.reduce((s, t) => s + t.revenueAmount, 0);
+  const partnersRevenue = txs.reduce((s, t) => s + t.ownerProfitAmount, 0);
+  const otherIncome = ledger
+    .filter((l) => l.kind === "in")
+    .reduce((s, l) => s + toRub(l.amount, l.currency, fx), 0);
+  const income = partnersRevenue + otherIncome;
+
+  // ── Расходы ───────────────────────────────────────────────────────────
+  // Зарплата в расход месяца попадает по дате выплаты; начисленное за месяц
+  // показываем рядом, чтобы была видна себестоимость самого месяца.
+  const salaryPaid = payrollPaid.reduce((s, p) => s + p.totalAmount, 0);
+  const salaryAccrued = payrollAccrued.reduce((s, p) => s + p.totalAmount, 0);
+  const aiSpent = topups.reduce((s, t) => s + t.amount, 0); // в долларах
+  const recurringRub = recurring.reduce((s, r) => s + toRub(r.amount, r.currency, fx), 0);
+
+  const out = ledger.filter((l) => l.kind === "out");
+  const byCategory = new Map<string, number>();
+  for (const l of out) {
+    byCategory.set(l.category, (byCategory.get(l.category) || 0) + toRub(l.amount, l.currency, fx));
+  }
+  const ads = byCategory.get("реклама") || 0;
+  const manualRest = [...byCategory.entries()]
+    .filter(([c]) => c !== "реклама")
+    .reduce((s, [, v]) => s + v, 0);
+
+  const rows: CostRow[] = [
+    {
+      key: "salary",
+      label: "Зарплата команды",
+      amount: round(salaryPaid),
+      source: payrollPaid.length
+        ? `выплачено ${payrollPaid.length} ${plural(payrollPaid.length, "человеку", "людям", "людям")}`
+        : "в этом месяце выплат не отмечено",
+      manual: true,
+    },
+    {
+      key: "ai",
+      label: "ИИ-контент, завод",
+      amount: round(aiSpent * fx),
+      source: topups.length
+        ? `${topups.length} ${plural(topups.length, "пополнение", "пополнения", "пополнений")} на $${fmt2(aiSpent)}`
+        : "пополнений не было",
+      manual: false,
+    },
+    {
+      key: "recurring",
+      label: "Сервер и сервисы",
+      amount: round(recurringRub),
+      source: recurring.length
+        ? `${recurring.length} ${plural(recurring.length, "платёж", "платежа", "платежей")} в справочнике`
+        : "справочник пуст",
+      manual: true,
+    },
+    {
+      key: "ads",
+      label: "Реклама",
+      amount: round(ads),
+      source: ads ? "журнал расходов" : "записей нет",
+      manual: true,
+    },
+    {
+      key: "other",
+      label: "Прочее",
+      amount: round(manualRest),
+      source: manualRest ? "журнал расходов" : "записей нет",
+      manual: true,
+    },
+  ];
+
+  const costs = rows.reduce((s, r) => s + r.amount, 0);
+  const profit = round(income) - costs;
+
+  // ── Метрики эффективности ─────────────────────────────────────────────
+  const jobsCost = jobs.reduce((s, j) => s + j.cost, 0); // смета в долларах
+  const videoCost = jobs.length ? round((jobsCost * fx) / jobs.length) : null;
+
+  const kpiForNew = newPartners.reduce(
+    (s, p) => s + (p.partnerType?.kpiAmount ?? p.project.kpiAmount),
+    0
+  );
+  const partnerCac = newPartners.length
+    ? round((ads + kpiForNew) / newPartners.length)
+    : null;
+
+  // Окупаемость: за сколько месяцев партнёр возвращает вложенное в него.
+  const activePartners = await prisma.partner.count({ where: { status: "ACTIVE" } });
+  const perPartner = activePartners ? partnersRevenue / activePartners : 0;
+  const payback = partnerCac && perPartner > 0 ? Math.round((partnerCac / perPartner) * 10) / 10 : null;
+
+  return {
+    month: ym,
+    fx,
+    income: {
+      turnover: round(turnover),
+      partners: round(partnersRevenue),
+      other: round(otherIncome),
+      total: round(income),
+      partnerShare: round(turnover - partnersRevenue),
+    },
+    costs: {
+      total: costs,
+      rows,
+      salaryAccrued: round(salaryAccrued),
+      salaryPaid: round(salaryPaid),
+      aiUsd: Math.round(aiSpent * 100) / 100,
+    },
+    profit,
+    margin: income > 0 ? Math.round((profit / income) * 1000) / 10 : null,
+    units: {
+      videoCost,
+      videos: jobs.length,
+      jobsUsd: Math.round(jobsCost * 100) / 100,
+      partnerCac,
+      newPartners: newPartners.length,
+      kpiForNew: round(kpiForNew),
+      ads: round(ads),
+      payback,
+    },
+    payroll: payrollAccrued.map((p) => ({
+      id: p.id,
+      userId: p.userId,
+      name: p.user.name,
+      total: p.totalAmount,
+      note: p.note,
+      paidAt: p.paidAt ? p.paidAt.toISOString().slice(0, 10) : null,
+    })),
+    ledger: ledger.map((l) => ({
+      id: l.id,
+      kind: l.kind,
+      date: l.date.toISOString().slice(0, 10),
+      category: l.category,
+      title: l.title,
+      amount: l.amount,
+      currency: l.currency,
+      note: l.note,
+    })),
+    recurring: recurring.map((r) => ({
+      id: r.id,
+      title: r.title,
+      category: r.category,
+      amount: r.amount,
+      currency: r.currency,
+      fromMonth: r.fromMonth,
+      toMonth: r.toMonth,
+    })),
+  };
+}
+
+function fmt2(n: number) {
+  return n.toLocaleString("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function plural(n: number, one: string, few: string, many: string) {
+  const a = Math.abs(n) % 100;
+  const b = a % 10;
+  if (a > 10 && a < 20) return many;
+  if (b > 1 && b < 5) return few;
+  if (b === 1) return one;
+  return many;
+}

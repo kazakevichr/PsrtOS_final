@@ -158,20 +158,59 @@ model Comment {
   user    User    @relation(fields: [userId], references: [id])
 }
 
+// Зарплата за месяц. Заводится руками на вкладке «Зарплата»: посчитанная
+// цифра остаётся рядом подсказкой, а решение за владельцем — состав команды
+// меняется, и формула поспевает не всегда (решение Романа 01.09).
+// totalAmount — начислено, paidAt — когда деньги реально ушли. В расходы
+// месяца запись попадает по paidAt, начисление показывается отдельно.
 model PayrollRecord {
   id          String    @id @default(cuid())
   userId      String
   month       String
-  fixedAmount Float
-  kpiTotal    Float
-  bonusTotal  Float
+  fixedAmount Float     @default(0)
+  kpiTotal    Float     @default(0)
+  bonusTotal  Float     @default(0)
   totalAmount Float
+  note        String    @default("")
   paidAt      DateTime?
   createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now()) @updatedAt
 
   user User @relation(fields: [userId], references: [id])
 
   @@unique([userId, month])
+}
+
+// Журнал денег: одна запись — одно движение. Метод кассовый, поэтому дата
+// здесь та, когда деньги пришли или ушли, а не когда о них договорились.
+// Партнёрские продажи, зарплата и пополнения кошельков сюда не пишутся —
+// у них свои таблицы, иначе месяц посчитается дважды.
+model Ledger {
+  id        String   @id @default(cuid())
+  kind      String // in | out
+  date      DateTime
+  category  String // реклама | сервис | прочее | продажи
+  title     String
+  amount    Float
+  currency  String   @default("RUB")
+  note      String   @default("")
+  byUserId  String?
+  createdAt DateTime @default(now())
+
+  @@index([date])
+}
+
+// Постоянные платежи: сервер, домены, подписки. Живут с месяца и до месяца,
+// чтобы смена цены не переписывала уже прошедшие периоды.
+model RecurringCost {
+  id        String   @id @default(cuid())
+  title     String
+  category  String   @default("сервис")
+  amount    Float
+  currency  String   @default("RUB")
+  fromMonth String // YYYY-MM
+  toMonth   String? // YYYY-MM, пусто — платим до сих пор
+  createdAt DateTime @default(now())
 }
 
 // ── Инста-аналитика (перенос из insta-hq/Netlify) ───────────────────────────
