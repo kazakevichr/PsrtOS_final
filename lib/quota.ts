@@ -95,8 +95,10 @@ async function factoryLinkSet() {
   return links;
 }
 
-// Дни правила: счёт метрики + нарушения (запрещённый тип в аккаунте).
-export async function quotaDays(daysBack = 63) {
+// Счёт метрики по дням + нарушения (запрещённый тип в аккаунте).
+// Считается один раз по всей сохранённой истории медиа, а какие даты
+// показать — решает вызывающий: последние N дней или календарный месяц.
+async function quotaCounts() {
   const rules = await quotaRules();
   const factory = await factoryLinkSet();
   const accounts = await prisma.igAccount.findMany({
@@ -134,23 +136,55 @@ export async function quotaDays(daysBack = 63) {
     d.done++;
   }
 
-  const today = kratParts().date;
-  const out = [];
-  for (let i = daysBack - 1; i >= 0; i--) {
-    const { date, weekday } = kratParts(new Date(Date.now() - i * 864e5));
+  return { rules, per };
+}
+
+const WD_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// День недели по дате-строке: календарный день один и тот же в любой зоне,
+// поэтому берём UTC — так же, как в monthWorkdays.
+export const weekdayOf = (date: string) =>
+  WD_NAMES[new Date(date + "T00:00:00Z").getUTCDay()];
+
+function buildDays(rules: QuotaRule[], per: any, dates: string[], today: string) {
+  return dates.map((date) => {
+    const weekday = weekdayOf(date);
     const work = isWorkday(weekday);
     const row: any = { date, weekday, isWorkday: work, isToday: date === today, rules: {} };
     for (const r of rules) {
-      const c = per[r.key][date] || { done: 0, bad: 0 };
+      const c = per[r.key]?.[date] || { done: 0, bad: 0 };
       const done = c.done >= r.perDay;
       row.rules[r.key] = {
         done: c.done, plan: r.perDay, bad: c.bad,
         status: !work ? "off" : done ? "ok" : c.done ? "partial" : "none",
       };
     }
-    out.push(row);
+    return row;
+  });
+}
+
+// Последние N дней по сегодняшний включительно.
+export async function quotaDays(daysBack = 63) {
+  const { rules, per } = await quotaCounts();
+  const today = kratParts().date;
+  const dates: string[] = [];
+  for (let i = daysBack - 1; i >= 0; i--) {
+    dates.push(kratParts(new Date(Date.now() - i * 864e5)).date);
   }
-  return { rules, days: out };
+  return { rules, days: buildDays(rules, per, dates, today) };
+}
+
+// Дни календарного месяца — чтобы смотреть закрытый месяц целиком, не
+// упираясь в окно последних N дней. Будущие дни не показываем.
+export async function quotaMonth(ym: string) {
+  const { rules, per } = await quotaCounts();
+  const today = kratParts().date;
+  const [y, m] = ym.split("-").map(Number);
+  const dates: string[] = [];
+  for (let d = 1; d <= new Date(y, m, 0).getDate(); d++) {
+    const date = `${ym}-${String(d).padStart(2, "0")}`;
+    if (date <= today) dates.push(date);
+  }
+  return { rules, days: buildDays(rules, per, dates, today) };
 }
 
 // Рабочие дни календарного месяца (пн–сб) по Красноярску.
@@ -167,13 +201,11 @@ export function monthWorkdays(ym: string) {
 // даты (Setting quota:start): дни до неё в деньгах не участвуют, потолок
 // месяца пропорционален оставшимся рабочим дням.
 export async function earnings(ym?: string) {
-  const { rules, days } = await quotaDays(63);
   const month = ym || kratParts().date.slice(0, 7);
+  const { rules, days } = await quotaMonth(month);
   const startRow = await prisma.setting.findUnique({ where: { key: "quota:start" } });
   const start = startRow?.value || "0000-00-00";
-  const inMonth = days.filter(
-    (d) => d.date.startsWith(month) && d.isWorkday && d.date >= start
-  );
+  const inMonth = days.filter((d) => d.isWorkday && d.date >= start);
   const wd = monthWorkdays(month);
   // Рабочие дни месяца, попадающие в зачёт (со старта и до конца месяца).
   const [y, m] = month.split("-").map(Number);
@@ -205,10 +237,14 @@ export async function earnings(ym?: string) {
   const smm = await prisma.user.findFirst({ where: { role: "SMM", isActive: true } });
   let extras: any[] = [];
   if (smm) {
+    const [my, mm] = month.split("-").map(Number);
     extras = await prisma.task.findMany({
       where: {
         assignedToUserId: smm.id, price: { not: null },
-        createdAt: { gte: new Date(`${month}-01T00:00:00Z`) },
+        createdAt: {
+          gte: new Date(Date.UTC(my, mm - 1, 1)),
+          lt: new Date(Date.UTC(my, mm, 1)),
+        },
       },
       orderBy: { createdAt: "desc" },
     });

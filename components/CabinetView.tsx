@@ -16,13 +16,27 @@ const CELL: Record<string, string> = {
 };
 const fmtR = (n: number) => `${Math.round(n).toLocaleString("ru-RU")} ₽`;
 
+// Сдвиг месяца: 0 — текущий, 1 — прошлый и так далее.
+const monthKey = (back: number) => {
+  const d = new Date();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() - back);
+  return d.toISOString().slice(0, 7);
+};
+
 export default function CabinetView() {
   const [data, setData] = useState<any>(null);
   const [page, setPage] = useState(0);
+  const [back, setBack] = useState(0);
 
   useEffect(() => {
-    fetch("/api/factory/quota?days=63").then((r) => r.json()).then(setData).catch(() => {});
-  }, []);
+    setData(null);
+    setPage(0);
+    const url = back === 0
+      ? "/api/factory/quota?days=63"
+      : `/api/factory/quota?month=${monthKey(back)}`;
+    fetch(url).then((r) => r.json()).then(setData).catch(() => {});
+  }, [back]);
 
   if (!data?.days?.length) return <p className="text-sm text-gray-400">Загружаю…</p>;
   const { rules, days, earnings } = data;
@@ -47,7 +61,13 @@ export default function CabinetView() {
             </p>
           </div>
           <div className="text-right">
-            <div className="text-sm text-gray-500">заработано по факту</div>
+            <div className="flex items-center justify-end gap-2 text-xs mb-1">
+              <button className="btn text-xs" onClick={() => setBack(back + 1)}>← месяц</button>
+              <button className="btn text-xs" disabled={back === 0} onClick={() => setBack(back - 1)}>месяц →</button>
+            </div>
+            <div className="text-sm text-gray-500">
+              {back === 0 ? "заработано по факту" : "к выплате за месяц"}
+            </div>
             <div className="text-2xl font-bold">
               {fmtR(earnings.base + earnings.extrasEarned)}
               <span className="text-sm text-gray-400 font-normal"> из {fmtR(earnings.baseMax)} + доп</span>
