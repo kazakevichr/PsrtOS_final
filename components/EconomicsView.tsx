@@ -378,9 +378,9 @@ export default function EconomicsView() {
   );
 }
 
-// График дохода и расхода по дням. Столбики парами: зелёный — пришло,
-// красный — ушло. Общая шкала у обоих, иначе маленький расход рядом с
-// большим доходом выглядел бы сопоставимым.
+// График по дням — как в «Соц.Сетях»: один столбец на день, синее сверху,
+// зелёное снизу. Шкала общая у обеих величин: доход и расход сравнимы между
+// собой напрямую, и разная шкала показывала бы неправду.
 function Chart({ series }: { series: { date: string; in: number; out: number }[] }) {
   const max = Math.max(1, ...series.map((p) => Math.max(p.in, p.out)));
   const label = (iso: string) =>
@@ -388,25 +388,25 @@ function Chart({ series }: { series: { date: string; in: number; out: number }[]
 
   return (
     <div className="card">
-      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
-        <h2 className="font-semibold">Динамика по дням</h2>
-        <span className="text-xs text-gray-400">зелёное — доход, красное — расход</span>
-      </div>
-      <div className="overflow-x-auto">
-        <div className="flex items-end gap-[3px] h-40 min-w-full pt-2" style={{ minWidth: series.length * 14 }}>
-          {series.map((p) => (
-            <div key={p.date} className="flex-1 flex items-end justify-center gap-[2px] h-full" title={`${label(p.date)} · +${fmt(p.in)} · −${fmt(p.out)}`}>
-              <div
-                className="w-1/2 rounded-t-sm bg-green-500/80"
-                style={{ height: `${Math.max(p.in ? 2 : 0, (p.in / max) * 100)}%` }}
-              />
-              <div
-                className="w-1/2 rounded-t-sm bg-red-400/80"
-                style={{ height: `${Math.max(p.out ? 2 : 0, (p.out / max) * 100)}%` }}
-              />
+      <h2 className="font-semibold mb-1">Динамика по дням</h2>
+      <p className="text-xs text-gray-400 mb-3">синее — поступления, зелёное — расход</p>
+      <div className="flex items-end gap-1 h-32">
+        {series.map((p) => (
+          <div
+            key={p.date}
+            className="flex-1 max-w-14 h-full flex flex-col justify-end items-center gap-0.5 group relative min-w-0"
+          >
+            <div className="hidden group-hover:block absolute -top-10 bg-gray-900 text-white text-xs rounded px-2 py-1 whitespace-nowrap z-10">
+              {label(p.date)}: {fmt(p.in)} пришло{p.out ? ` · ${fmt(p.out)} ушло` : ""}
             </div>
-          ))}
-        </div>
+            {p.in > 0 && (
+              <div className="w-full bg-brand-600 rounded-t" style={{ height: `${Math.max(2, (p.in / max) * 100)}%` }} />
+            )}
+            {p.out > 0 && (
+              <div className="w-full bg-green-500 rounded-t" style={{ height: `${Math.max(2, (p.out / max) * 100)}%` }} />
+            )}
+          </div>
+        ))}
       </div>
       <div className="flex justify-between text-xs text-gray-400 mt-1">
         <span>{label(series[0].date)}</span>
