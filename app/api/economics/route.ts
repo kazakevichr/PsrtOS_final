@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { FX_KEY, monthMoney, projectSplit, Span } from "@/lib/ledger";
+import { FX_KEY, allSpan, daysSpan, monthMoney, projectSplit, Span } from "@/lib/ledger";
 import { resolvePeriod, PeriodType } from "@/lib/economics";
 
 export const dynamic = "force-dynamic";
@@ -15,10 +15,18 @@ async function owner() {
 export async function GET(req: Request) {
   if (!(await owner())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const q = new URL(req.url).searchParams;
-  const type = (["day", "week", "month"].includes(q.get("period") || "")
-    ? q.get("period")
-    : "month") as PeriodType;
-  const span: Span = { ...resolvePeriod(type, q.get("anchor") || undefined), type };
+  // Окна дашборда — «7 дн», «30 дн», «90 дн»; бухгалтерские — день/неделя/месяц.
+  const raw = q.get("period") || "month";
+  const back = Math.max(0, Number(q.get("back") || 0));
+  const n = /^(\d+)d$/.exec(raw);
+  const span: Span = raw === "all"
+    ? await allSpan()
+    : n
+    ? daysSpan(Number(n[1]), back)
+    : (() => {
+        const type = (["day", "week", "month"].includes(raw) ? raw : "month") as PeriodType;
+        return { ...resolvePeriod(type, q.get("anchor") || undefined), type };
+      })();
   const project = q.get("project") || undefined;
 
   const [money, split, projects] = await Promise.all([

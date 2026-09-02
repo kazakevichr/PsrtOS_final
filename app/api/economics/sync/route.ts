@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { Span } from "@/lib/ledger";
+import { Span, daysSpan } from "@/lib/ledger";
 import { resolvePeriod, PeriodType } from "@/lib/economics";
 import { syncIncome } from "@/lib/income";
 
@@ -14,8 +14,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const b = await req.json().catch(() => ({}));
-  const type = (["day", "week", "month"].includes(b.period) ? b.period : "month") as PeriodType;
-  const span: Span = { ...resolvePeriod(type, b.anchor), type };
+  const n = /^(\d+)d$/.exec(String(b.period || ""));
+  const span: Span = n
+    ? daysSpan(Number(n[1]), Math.max(0, Number(b.back || 0)))
+    : (() => {
+        const type = (["day", "week", "month"].includes(b.period) ? b.period : "month") as PeriodType;
+        return { ...resolvePeriod(type, b.anchor), type };
+      })();
   try {
     return NextResponse.json({ period: span.label, results: await syncIncome(span) });
   } catch (e: any) {

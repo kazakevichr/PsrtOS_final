@@ -22,6 +22,7 @@ const fmt = (n: number) => `${Math.round(n).toLocaleString("ru-RU")} ₽`;
 // Якорь периода: на сколько шагов назад от сегодня и в каких единицах.
 const anchorOf = (type: string, back: number) => {
   const d = new Date();
+  if (/^\d+d$/.test(type)) return "";
   if (type === "month") {
     d.setUTCDate(1);
     d.setUTCMonth(d.getUTCMonth() - back);
@@ -31,7 +32,15 @@ const anchorOf = (type: string, back: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-const PERIODS: [string, string][] = [["day", "день"], ["week", "неделя"], ["month", "месяц"]];
+const PERIODS: [string, string][] = [
+  ["day", "день"],
+  ["7d", "7 дн"],
+  ["30d", "30 дн"],
+  ["90d", "90 дн"],
+  ["month", "месяц"],
+  ["all", "всё время"],
+];
+const isWindow = (t: string) => /^\d+d$/.test(t) || t === "all";
 
 // «сентябрь 2026» — без хвостового «г.», иначе css-capitalize делает «Г.»
 const monthName = (label: string) => {
@@ -62,11 +71,12 @@ export default function EconomicsView() {
 
   const load = useCallback(() => {
     const q = proj ? `&project=${proj}` : "";
-    fetch(`/api/economics?period=${type}&anchor=${month}${q}`)
+    const when = isWindow(type) ? `back=${back}` : `anchor=${month}`;
+    fetch(`/api/economics?period=${type}&${when}${q}`)
       .then((r) => r.json())
       .then(setD)
       .catch(() => setErr("Не получилось загрузить период"));
-  }, [type, month, proj]);
+  }, [type, month, back, proj]);
 
   useEffect(() => {
     setD(null);
@@ -154,8 +164,8 @@ export default function EconomicsView() {
                 {label}
               </button>
             ))}
-            <button className="btn btn-secondary text-xs" onClick={() => setBack(back + 1)}>←</button>
-            <button className="btn btn-secondary text-xs" disabled={back === 0} onClick={() => setBack(back - 1)}>→</button>
+            <button className="btn btn-secondary text-xs" disabled={type === "all"} onClick={() => setBack(back + 1)}>←</button>
+            <button className="btn btn-secondary text-xs" disabled={back === 0 || type === "all"} onClick={() => setBack(back - 1)}>→</button>
             <FxInput fx={d.fx} busy={busy} onSave={(fx) => send("/api/economics", "POST", { fx })} />
             <button
               className="btn btn-secondary text-xs"
@@ -168,7 +178,7 @@ export default function EconomicsView() {
                   const r = await fetch("/api/economics/sync", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ period: type, anchor: month }),
+                    body: JSON.stringify({ period: type, anchor: month, back }),
                   });
                   const j = await r.json();
                   if (!r.ok) setErr(j.error || "Не получилось обновить");
@@ -203,8 +213,14 @@ export default function EconomicsView() {
             label="Доход компании"
             value={fmt(d.income.total)}
             hint={d.income.other ? `в том числе ${fmt(d.income.other)} прочих` : "продажи партнёров"}
+            delta={delta(d.income.total, d.prev?.income)}
           />
-          <Kpi label="Расходы" value={fmt(d.costs.total)} hint="всё, что внесено руками" />
+          <Kpi
+            label="Расходы"
+            value={fmt(d.costs.total)}
+            hint="всё, что внесено руками"
+            delta={delta(d.costs.total, d.prev?.costs, true)}
+          />
           <Kpi
             label={d.scoped ? "Вклад направления" : "Прибыль"}
             value={fmt(d.profit)}
@@ -212,13 +228,17 @@ export default function EconomicsView() {
               d.scoped
                 ? "до общих расходов — сервер и завод общие"
                 : d.margin == null
-                  ? "дохода за месяц нет"
+                  ? "дохода за период нет"
                   : `рентабельность ${d.margin.toLocaleString("ru-RU")} %`
             }
             tone={d.profit >= 0 ? "good" : "bad"}
+            delta={delta(d.profit, d.prev?.profit)}
           />
         </div>
       </div>
+
+      {/* Динамика по дням */}
+      {d.series?.length > 1 && <Chart series={d.series} />}
 
       {/* Сводка по направлениям */}
       {!proj && d.split && d.split.rows.length > 0 && (
@@ -394,6 +414,44 @@ export default function EconomicsView() {
   );
 }
 
+// График дохода и расхода по дням. Столбики парами: зелёный — пришло,
+// красный — ушло. Общая шкала у обоих, иначе маленький расход рядом с
+// большим доходом выглядел бы сопоставимым.
+function Chart({ series }: { series: { date: string; in: number; out: number }[] }) {
+  const max = Math.max(1, ...series.map((p) => Math.max(p.in, p.out)));
+  const label = (iso: string) =>
+    new Date(iso + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
+
+  return (
+    <div className="card">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+        <h2 className="font-semibold">Динамика по дням</h2>
+        <span className="text-xs text-gray-400">зелёное — доход, красное — расход</span>
+      </div>
+      <div className="overflow-x-auto">
+        <div className="flex items-end gap-[3px] h-40 min-w-full pt-2" style={{ minWidth: series.length * 14 }}>
+          {series.map((p) => (
+            <div key={p.date} className="flex-1 flex items-end justify-center gap-[2px] h-full" title={`${label(p.date)} · +${fmt(p.in)} · −${fmt(p.out)}`}>
+              <div
+                className="w-1/2 rounded-t-sm bg-green-500/80"
+                style={{ height: `${Math.max(p.in ? 2 : 0, (p.in / max) * 100)}%` }}
+              />
+              <div
+                className="w-1/2 rounded-t-sm bg-red-400/80"
+                style={{ height: `${Math.max(p.out ? 2 : 0, (p.out / max) * 100)}%` }}
+              />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex justify-between text-xs text-gray-400 mt-1">
+        <span>{label(series[0].date)}</span>
+        <span>{label(series[series.length - 1].date)}</span>
+      </div>
+    </div>
+  );
+}
+
 function Tab({ on, onClick, children }: { on: boolean; onClick: () => void; children: any }) {
   return (
     <button
@@ -405,13 +463,37 @@ function Tab({ on, onClick, children }: { on: boolean; onClick: () => void; chil
   );
 }
 
-function Kpi({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: string }) {
+// Изменение к прошлому окну. lessIsBetter — для расходов: там рост это плохо.
+function delta(now: number, before?: number | null, lessIsBetter = false) {
+  if (before == null || before === 0) return null;
+  const pct = Math.round(((now - before) / Math.abs(before)) * 1000) / 10;
+  if (pct === 0) return null;
+  const good = lessIsBetter ? pct < 0 : pct > 0;
+  return { pct, good };
+}
+
+function Kpi({
+  label, value, hint, tone, delta: d,
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone?: string;
+  delta?: { pct: number; good: boolean } | null;
+}) {
   const color = tone === "good" ? "text-green-700" : tone === "bad" ? "text-red-700" : "";
   return (
     <div>
       <div className="text-sm text-gray-500">{label}</div>
       <div className={`text-2xl font-bold tabular-nums ${color}`}>{value}</div>
-      <div className="text-xs text-gray-400">{hint}</div>
+      <div className="text-xs text-gray-400">
+        {d && (
+          <span className={`font-semibold mr-1.5 ${d.good ? "text-green-700" : "text-red-700"}`}>
+            {d.pct > 0 ? "▲" : "▼"} {Math.abs(d.pct).toLocaleString("ru-RU")} %
+          </span>
+        )}
+        {hint}
+      </div>
     </div>
   );
 }

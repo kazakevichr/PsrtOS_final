@@ -36,7 +36,57 @@ export const isMonth = (s: string) => /^\d{4}-\d{2}$/.test(s);
 
 // Период отчёта. Месяц остаётся основным — зарплата и постоянные платежи
 // живут месяцами, — но день и неделю тоже нужно уметь показать.
-export type Span = { start: Date; end: Date; label: string; type: "day" | "week" | "month" };
+export type Span = {
+  start: Date;
+  end: Date;
+  label: string;
+  type: "day" | "week" | "month" | "days" | "all";
+};
+
+/**
+ * Всё время: от самой ранней записи до сегодня. Если данных ещё нет, берём
+ * последний год — пустой график честнее выдуманного диапазона.
+ */
+export async function allSpan(): Promise<Span> {
+  const [tx, led] = await Promise.all([
+    prisma.transaction.findFirst({ orderBy: { date: "asc" }, select: { date: true } }),
+    prisma.ledger.findFirst({ orderBy: { date: "asc" }, select: { date: true } }),
+  ]);
+  const dates = [tx?.date, led?.date].filter(Boolean) as Date[];
+  const now = new Date();
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  const earliest = dates.length
+    ? new Date(Math.min(...dates.map((d) => d.getTime())))
+    : new Date(end.getTime() - 365 * 864e5);
+  const start = new Date(Date.UTC(earliest.getUTCFullYear(), earliest.getUTCMonth(), 1));
+  const d = (x: Date) => x.toISOString().slice(0, 10);
+  return { start, end, type: "all", label: `${d(start)} – ${d(new Date(end.getTime() - 864e5))}` };
+}
+
+/** Окно в N последних дней — для дашборда «7 / 30 / 90 дней». */
+export function daysSpan(n: number, back = 0): Span {
+  const today = new Date();
+  const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1));
+  end.setUTCDate(end.getUTCDate() - back * n);
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - n);
+  const d = (x: Date) => x.toISOString().slice(0, 10);
+  const last = new Date(end.getTime() - 864e5);
+  return { start, end, type: "days", label: `${d(start)} – ${d(last)}` };
+}
+
+/** Предыдущее окно такой же длины — с чем сравнивать. */
+export function previousSpan(span: Span): Span {
+  const ms = span.end.getTime() - span.start.getTime();
+  const start = new Date(span.start.getTime() - ms);
+  const end = new Date(span.start);
+  if (span.type === "month") {
+    const s = new Date(Date.UTC(span.start.getUTCFullYear(), span.start.getUTCMonth() - 1, 1));
+    return { start: s, end: span.start, type: "month", label: s.toISOString().slice(0, 7) };
+  }
+  const d = (x: Date) => x.toISOString().slice(0, 10);
+  return { start, end, type: span.type, label: `${d(start)} – ${d(new Date(end.getTime() - 864e5))}` };
+}
 
 /** Доля месяца, которую занимает период: постоянные платежи делим по дням. */
 export function monthShare(span: Span) {
@@ -80,7 +130,7 @@ export type CostRow = {
  * значило бы делить сервер и завод по правилу, которого никто не выбирал.
  * Завод общий всегда: он делает контент на всю группу.
  */
-export async function monthMoney(span: Span, projectId?: string) {
+export async function monthMoney(span: Span, projectId?: string, light = false) {
   const { start, end } = span;
   const ym = span.label;
   const months = monthsOf(span);
@@ -96,7 +146,7 @@ export async function monthMoney(span: Span, projectId?: string) {
           date: { gte: start, lt: end },
           ...(projectId ? { partner: { projectId } } : {}),
         },
-        select: { revenueAmount: true, ownerProfitAmount: true },
+        select: { date: true, revenueAmount: true, ownerProfitAmount: true },
       }),
       prisma.ledger.findMany({
         where: { date: { gte: start, lt: end }, ...only },
@@ -193,9 +243,69 @@ export async function monthMoney(span: Span, projectId?: string) {
   const perPartner = activePartners ? partnersRevenue / activePartners : 0;
   const payback = partnerCac && perPartner > 0 ? Math.round((partnerCac / perPartner) * 10) / 10 : null;
 
+  // ── Динамика по дням и сравнение с прошлым окном ──────────────────────
+  // Считаем только для «полного» вызова: сравнение само зовёт эту же функцию
+  // ещё раз, и без флага получилась бы бесконечная лесенка.
+  let series: { date: string; in: number; out: number }[] = [];
+  let prev: { income: number; costs: number; profit: number } | null = null;
+
+  if (!light) {
+    const byDay = new Map<string, { in: number; out: number }>();
+    const day = (d: Date) => d.toISOString().slice(0, 10);
+    const at = (k: string) => {
+      let v = byDay.get(k);
+      if (!v) byDay.set(k, (v = { in: 0, out: 0 }));
+      return v;
+    };
+    for (const cursor = new Date(start); cursor < end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      at(day(cursor));
+    }
+    for (const t of txs) at(day(t.date)).in += t.ownerProfitAmount;
+    for (const l of ledger) {
+      const v = at(day(l.date));
+      const rub = toRub(l.amount, l.currency, fx);
+      if (l.kind === "in") v.in += rub;
+      else v.out += rub;
+    }
+    // Постоянные платежи размазываем ровным слоем по дням месяца — иначе
+    // график врал бы, показывая сервер как всплеск первого числа.
+    const perDay = recurring.reduce((s, r) => s + toRub(r.amount, r.currency, fx), 0) / 30;
+    for (const v of byDay.values()) v.out += perDay;
+
+    const daily = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+
+    // Длинный период по дням превращается в частокол из сотен полосок —
+    // с трёх месяцев схлопываем в месяцы.
+    if (daily.length > 92) {
+      const byMonth = new Map<string, { in: number; out: number }>();
+      for (const [date, v] of daily) {
+        const k = date.slice(0, 7);
+        const m = byMonth.get(k) || { in: 0, out: 0 };
+        m.in += v.in;
+        m.out += v.out;
+        byMonth.set(k, m);
+      }
+      series = [...byMonth.entries()].map(([date, v]) => ({
+        date: `${date}-01`,
+        in: round(v.in),
+        out: round(v.out),
+      }));
+    } else {
+      series = daily.map(([date, v]) => ({ date, in: round(v.in), out: round(v.out) }));
+    }
+
+    // «Всё время» не с чем сравнивать — периода до него нет.
+    if (span.type !== "all") {
+      const before = await monthMoney(previousSpan(span), projectId, true);
+      prev = { income: before.income.total, costs: before.costs.total, profit: before.profit };
+    }
+  }
+
   return {
     month: ym,
     periodType: span.type,
+    series,
+    prev,
     fx,
     projectId: projectId || null,
     scoped,
