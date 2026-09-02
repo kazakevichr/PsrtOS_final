@@ -31,6 +31,17 @@ export type SyncResult = {
   error?: string;
 };
 
+/**
+ * Значение переменной окружения, устойчивое к частой опечатке: в поле
+ * «Value» вставляют целиком строку «ИМЯ=значение». Отрезаем имя, если оно
+ * приехало вместе со значением, — иначе адрес базы не разбирается, а ошибка
+ * выглядит загадочным EAI_AGAIN.
+ */
+function env(name: string): string {
+  const raw = (process.env[name] || "").trim();
+  return raw.startsWith(`${name}=`) ? raw.slice(name.length + 1).trim() : raw;
+}
+
 const LABEL: Record<string, string> = {
   superfit: "CloudPayments",
   oracle: "Оракл",
@@ -50,8 +61,8 @@ const days = (span: Span) => {
 
 /** Пары ключей сайтов CloudPayments: "pk1:secret1;pk2:secret2". */
 function cpKeys() {
-  const raw = `${process.env.INCOME_CP_PUBLIC_ID || ""}:${process.env.INCOME_CP_API_SECRET || ""}`;
-  const many = process.env.INCOME_CP_KEYS || "";
+  const raw = `${env("INCOME_CP_PUBLIC_ID")}:${env("INCOME_CP_API_SECRET")}`;
+  const many = env("INCOME_CP_KEYS");
   const pairs = (many || raw)
     .split(";")
     .map((p) => p.trim())
@@ -91,7 +102,7 @@ async function fromCloudPayments(span: Span): Promise<IncomeItem[]> {
 }
 
 async function fromOracle(span: Span): Promise<IncomeItem[]> {
-  const url = process.env.INCOME_ORACLE_DB;
+  const url = env("INCOME_ORACLE_DB");
   if (!url) throw new Error("не задан INCOME_ORACLE_DB");
   // pg тянем лениво: он нужен только этому источнику.
   const { Client } = await import("pg");
