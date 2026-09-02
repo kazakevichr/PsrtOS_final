@@ -6,6 +6,7 @@ type Project = {
   id: string;
   name: string;
   currency: string;
+  incomeSource: string | null;
   partnerCommissionPercent: number;
   ownerProfitPercent: number;
   kpiEnabled: boolean;
@@ -37,6 +38,7 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         currency: form.currency,
+        incomeSource: form.incomeSource || null,
         partnerCommissionPercent: Number(form.partnerCommissionPercent),
         ownerProfitPercent: Number(form.ownerProfitPercent),
         kpiEnabled: form.kpiEnabled,
@@ -74,6 +76,21 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
         <label className="flex flex-col gap-1">
           Валюта
           <input className="input" value={form.currency} onChange={(e) => set("currency", e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1">
+          Откуда берём доход
+          <select
+            className="input"
+            value={form.incomeSource || ""}
+            onChange={(e) => set("incomeSource", e.target.value || null)}
+          >
+            <option value="">вношу руками</option>
+            <option value="superfit">лендинг Суперфита</option>
+            <option value="oracle">подписки Оракла</option>
+          </select>
+          <span className="text-xs text-gray-400">
+            «Обновить поступления» в Бухгалтерии спросит источник за месяц.
+          </span>
         </label>
         <label className="flex flex-col gap-1">
           % партнёру от выручки

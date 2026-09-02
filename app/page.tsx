@@ -19,6 +19,7 @@ export default async function DashboardPage() {
   if (session.user.role !== "OWNER") redirect("/payroll");
 
   const projects = await prisma.project.findMany({
+    where: { isActive: true },
     include: { partners: { include: { transactions: true } } },
     orderBy: { createdAt: "asc" },
   });

@@ -248,6 +248,7 @@ export async function monthMoney(ym: string, projectId?: string) {
       currency: l.currency,
       note: l.note,
       project: l.project?.name || null,
+      source: l.source,
     })),
     recurring: recurring.map((r) => ({
       id: r.id,

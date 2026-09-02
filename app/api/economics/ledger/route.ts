@@ -47,6 +47,15 @@ export async function DELETE(req: Request) {
   }
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Нет id" }, { status: 400 });
+  // Записи из внешних источников удалять нечего: следующее обновление
+  // принесёт их обратно. Убирать такой доход нужно в самом источнике.
+  const entry = await prisma.ledger.findUnique({ where: { id } });
+  if (entry && entry.source !== "руками") {
+    return NextResponse.json(
+      { error: "Эта запись пришла из источника — удалять её нужно там" },
+      { status: 400 }
+    );
+  }
   await prisma.ledger.delete({ where: { id } });
   return NextResponse.json({ ok: true });
 }

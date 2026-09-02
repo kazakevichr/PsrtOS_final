@@ -51,6 +51,9 @@ model Project {
   healthGreenDays          Int      @default(7)
   healthYellowDays         Int      @default(29)
   isActive                 Boolean  @default(true)
+  // Откуда тянуть поступления: superfit (лендинг с CloudPayments) или
+  // oracle (подписки Оракла). Пусто — доход вносится руками.
+  incomeSource             String?
   knowledgeBase            String   @default("")
   createdAt                DateTime @default(now())
 
@@ -204,10 +207,16 @@ model Ledger {
   note      String   @default("")
   projectId String? // пусто — расход общий, не на конкретное направление
   byUserId  String?
-  createdAt DateTime @default(now())
+  // Откуда запись: «руками» или имя источника, который её принёс.
+  // externalId — id платежа у источника, по нему синхронизация узнаёт своё
+  // и не заводит один и тот же платёж дважды.
+  source     String  @default("руками")
+  externalId String?
+  createdAt  DateTime @default(now())
 
   project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
+  @@unique([source, externalId])
   @@index([date])
 }
 

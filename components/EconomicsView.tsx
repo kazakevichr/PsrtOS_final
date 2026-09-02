@@ -39,6 +39,7 @@ export default function EconomicsView() {
   const [d, setD] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [sync, setSync] = useState<any[] | null>(null);
 
   const month = monthKey(back);
 
@@ -87,6 +88,35 @@ export default function EconomicsView() {
     <div className="space-y-4">
       {err && <div className="card border-red-200 bg-red-50 text-sm text-red-700">{err}</div>}
 
+      {sync && (
+        <div className="card text-sm">
+          <div className="flex items-baseline justify-between gap-2 mb-2">
+            <b>Поступления обновлены</b>
+            <button className="text-xs text-gray-400 hover:text-gray-700" onClick={() => setSync(null)}>
+              скрыть
+            </button>
+          </div>
+          {sync.length === 0 ? (
+            <p className="text-gray-500">
+              Ни у одного направления не указан источник. Настройки → проект → откуда берём доход.
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              {sync.map((r: any) => (
+                <li key={r.project} className={r.error ? "text-red-700" : "text-gray-600"}>
+                  <b className="text-gray-900">{r.project}</b>{" "}
+                  {r.error
+                    ? `— источник не ответил: ${r.error}`
+                    : r.added
+                      ? `— новых платежей: ${r.added}${r.known ? `, уже было ${r.known}` : ""}`
+                      : `— ничего нового${r.known ? `, всего ${r.known}` : ""}`}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* Итог месяца */}
       <div className="card">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -101,6 +131,32 @@ export default function EconomicsView() {
             <button className="btn btn-secondary text-xs" onClick={() => setBack(back + 1)}>←</button>
             <button className="btn btn-secondary text-xs" disabled={back === 0} onClick={() => setBack(back - 1)}>→</button>
             <FxInput fx={d.fx} busy={busy} onSave={(fx) => send("/api/economics", "POST", { fx })} />
+            <button
+              className="btn btn-secondary text-xs"
+              disabled={busy}
+              title="Спросить у Суперфита и Оракла, что пришло за месяц"
+              onClick={async () => {
+                setBusy(true);
+                setErr("");
+                try {
+                  const r = await fetch("/api/economics/sync", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ month: d.month }),
+                  });
+                  const j = await r.json();
+                  if (!r.ok) setErr(j.error || "Не получилось обновить");
+                  else {
+                    setSync(j.results);
+                    load();
+                  }
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? "…" : "Обновить поступления"}
+            </button>
           </div>
         </div>
 
@@ -507,6 +563,7 @@ function Journal({ rows, month, busy, send, projects, proj }: any) {
                   {r.title}
                   <span className="text-xs text-gray-400 ml-2">
                     {r.category}{r.project ? ` · ${r.project}` : ""}
+                    {r.source !== "руками" ? " · сам" : ""}
                   </span>
                 </td>
                 <td className={`py-2 text-right tabular-nums whitespace-nowrap ${r.kind === "in" ? "text-green-700" : ""}`}>
@@ -514,13 +571,19 @@ function Journal({ rows, month, busy, send, projects, proj }: any) {
                   {r.currency === "USD" ? `$${r.amount}` : fmt(r.amount)}
                 </td>
                 <td className="py-2 pl-3 text-right">
-                  <button
-                    className="text-xs text-gray-400 hover:text-red-600"
-                    disabled={busy}
-                    onClick={() => send(`/api/economics/ledger?id=${r.id}`, "DELETE", {})}
-                  >
-                    удалить
-                  </button>
+                  {r.source === "руками" ? (
+                    <button
+                      className="text-xs text-gray-400 hover:text-red-600"
+                      disabled={busy}
+                      onClick={() => send(`/api/economics/ledger?id=${r.id}`, "DELETE", {})}
+                    >
+                      удалить
+                    </button>
+                  ) : (
+                    <span className="text-xs text-gray-300" title="Пришло из источника — правится там">
+                      из источника
+                    </span>
+                  )}
                 </td>
               </tr>
             ))}
