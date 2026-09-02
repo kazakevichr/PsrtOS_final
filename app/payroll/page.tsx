@@ -38,6 +38,15 @@ export default async function PayrollPage({
   const records = canEnter
     ? await prisma.payrollRecord.findMany({ where: { month: period.label } })
     : [];
+  // Направление у зарплаты: кто работает на один проект, тот и попадает в его
+  // расходы; у остальных пусто — такая зарплата остаётся общей.
+  const projectList = canEnter
+    ? await prisma.project.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
   const recordBy = new Map(records.map((r) => [r.userId, r]));
   const smmEarned = canEnter ? await earnings(period.label) : null;
   const hintFor = (userId: string, computed: number) =>
@@ -105,10 +114,16 @@ export default async function PayrollPage({
                 userId={p.userId}
                 month={period.label}
                 computed={hintFor(p.userId, p.totalAmount)}
+                projects={projectList}
                 record={(() => {
                   const r = recordBy.get(p.userId);
                   return r
-                    ? { id: r.id, totalAmount: r.totalAmount, paidAt: r.paidAt ? r.paidAt.toISOString() : null }
+                    ? {
+                        id: r.id,
+                        totalAmount: r.totalAmount,
+                        projectId: r.projectId,
+                        paidAt: r.paidAt ? r.paidAt.toISOString() : null,
+                      }
                     : null;
                 })()}
               />

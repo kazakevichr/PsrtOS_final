@@ -35,6 +35,7 @@ const monthTitle = (ym: string) => {
 
 export default function EconomicsView() {
   const [back, setBack] = useState(0);
+  const [proj, setProj] = useState("");
   const [d, setD] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -42,11 +43,12 @@ export default function EconomicsView() {
   const month = monthKey(back);
 
   const load = useCallback(() => {
-    fetch(`/api/economics?month=${month}`)
+    const q = proj ? `&project=${proj}` : "";
+    fetch(`/api/economics?month=${month}${q}`)
       .then((r) => r.json())
       .then(setD)
       .catch(() => setErr("Не получилось загрузить месяц"));
-  }, [month]);
+  }, [month, proj]);
 
   useEffect(() => {
     setD(null);
@@ -78,6 +80,8 @@ export default function EconomicsView() {
 
   const costs = d.costs.rows.filter((r: any) => r.amount > 0);
   const total = d.costs.total || 1;
+  const projects: any[] = d.projects || [];
+  const current = projects.find((p) => p.id === proj);
 
   return (
     <div className="space-y-4">
@@ -90,6 +94,7 @@ export default function EconomicsView() {
             <h1 className="text-xl font-bold">Бухгалтерия</h1>
             <p className="text-sm text-gray-500">
               {monthTitle(d.month)} · курс {d.fx.toLocaleString("ru-RU")} ₽/$
+              {current ? ` · ${current.name}` : ""}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -98,6 +103,17 @@ export default function EconomicsView() {
             <FxInput fx={d.fx} busy={busy} onSave={(fx) => send("/api/economics", "POST", { fx })} />
           </div>
         </div>
+
+        {projects.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-4">
+            <Tab on={!proj} onClick={() => setProj("")}>Все направления</Tab>
+            {projects.map((p) => (
+              <Tab key={p.id} on={proj === p.id} onClick={() => setProj(p.id)}>
+                {p.name}
+              </Tab>
+            ))}
+          </div>
+        )}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
           <Kpi label="Оборот" value={fmt(d.income.turnover)} hint={`партнёрам ушло ${fmt(d.income.partnerShare)}`} />
@@ -108,13 +124,84 @@ export default function EconomicsView() {
           />
           <Kpi label="Расходы" value={fmt(d.costs.total)} hint={`зарплаты выплачено ${fmt(d.costs.salaryPaid)}`} />
           <Kpi
-            label="Прибыль"
+            label={d.scoped ? "Вклад направления" : "Прибыль"}
             value={fmt(d.profit)}
-            hint={d.margin == null ? "дохода за месяц нет" : `рентабельность ${d.margin.toLocaleString("ru-RU")} %`}
+            hint={
+              d.scoped
+                ? "до общих расходов — сервер и завод общие"
+                : d.margin == null
+                  ? "дохода за месяц нет"
+                  : `рентабельность ${d.margin.toLocaleString("ru-RU")} %`
+            }
             tone={d.profit >= 0 ? "good" : "bad"}
           />
         </div>
       </div>
+
+      {/* Сводка по направлениям */}
+      {!proj && d.split && d.split.rows.length > 0 && (
+        <div className="card">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+            <h2 className="font-semibold">По направлениям</h2>
+            <span className="text-xs text-gray-400">
+              вклад — это доход минус свои расходы, до общих
+            </span>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs uppercase tracking-wide text-gray-400">
+                <th className="text-left font-medium pb-2">Направление</th>
+                <th className="text-right font-medium pb-2">Доход</th>
+                <th className="text-right font-medium pb-2">Свои расходы</th>
+                <th className="text-right font-medium pb-2">Вклад</th>
+                <th className="text-right font-medium pb-2">Рентабельность</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.split.rows.map((r: any) => (
+                <tr key={r.id} className="border-t border-gray-100">
+                  <td className="py-2">
+                    <button className="text-brand-700 hover:underline" onClick={() => setProj(r.id)}>
+                      {r.name}
+                    </button>
+                  </td>
+                  <td className="py-2 text-right tabular-nums">{fmt(r.income)}</td>
+                  <td className="py-2 text-right tabular-nums text-gray-500">{fmt(r.direct)}</td>
+                  <td className={`py-2 text-right tabular-nums ${r.contribution < 0 ? "text-red-700" : ""}`}>
+                    {fmt(r.contribution)}
+                  </td>
+                  <td className="py-2 text-right tabular-nums text-gray-500">
+                    {r.margin == null ? "—" : `${r.margin.toLocaleString("ru-RU")} %`}
+                  </td>
+                </tr>
+              ))}
+              <tr className="border-t border-gray-100 text-gray-500">
+                <td className="py-2">
+                  Общие
+                  <span className="text-xs text-gray-400 ml-2">сервер, завод, зарплата без направления</span>
+                </td>
+                <td className="py-2 text-right tabular-nums">
+                  {d.split.shared.income ? fmt(d.split.shared.income) : "—"}
+                </td>
+                <td className="py-2 text-right tabular-nums">{fmt(d.split.shared.direct)}</td>
+                <td className="py-2 text-right tabular-nums">
+                  {fmt(d.split.shared.income - d.split.shared.direct)}
+                </td>
+                <td className="py-2 text-right">—</td>
+              </tr>
+              <tr className="border-t border-gray-300 font-semibold">
+                <td className="py-2">Итого</td>
+                <td className="py-2 text-right tabular-nums">{fmt(d.income.total)}</td>
+                <td className="py-2 text-right tabular-nums">{fmt(d.costs.total)}</td>
+                <td className="py-2 text-right tabular-nums">{fmt(d.profit)}</td>
+                <td className="py-2 text-right tabular-nums">
+                  {d.margin == null ? "—" : `${d.margin.toLocaleString("ru-RU")} %`}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Расходы */}
       <div className="card">
@@ -224,10 +311,21 @@ export default function EconomicsView() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Recurring rows={d.recurring} month={d.month} busy={busy} send={send} />
-        <Journal rows={d.ledger} month={d.month} busy={busy} send={send} />
+        <Recurring rows={d.recurring} month={d.month} busy={busy} send={send} projects={projects} proj={proj} />
+        <Journal rows={d.ledger} month={d.month} busy={busy} send={send} projects={projects} proj={proj} />
       </div>
     </div>
+  );
+}
+
+function Tab({ on, onClick, children }: { on: boolean; onClick: () => void; children: any }) {
+  return (
+    <button
+      className={`btn text-xs ${on ? "btn-primary" : "btn-secondary"}`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -276,9 +374,9 @@ function FxInput({ fx, busy, onSave }: { fx: number; busy: boolean; onSave: (fx:
   );
 }
 
-function Recurring({ rows, month, busy, send }: any) {
+function Recurring({ rows, month, busy, send, projects, proj }: any) {
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ title: "", amount: "", currency: "RUB" });
+  const [f, setF] = useState({ title: "", amount: "", currency: "RUB", projectId: proj || "" });
   const sum = rows.reduce((s: number, r: any) => s + (r.currency === "USD" ? 0 : r.amount), 0);
 
   return (
@@ -297,7 +395,10 @@ function Recurring({ rows, month, busy, send }: any) {
           <tbody>
             {rows.map((r: any) => (
               <tr key={r.id} className="border-b border-gray-100 last:border-0">
-                <td className="py-2">{r.title}</td>
+                <td className="py-2">
+                  {r.title}
+                  <span className="text-xs text-gray-400 ml-2">{r.project || "общий"}</span>
+                </td>
                 <td className="py-2 text-right tabular-nums whitespace-nowrap">
                   {r.currency === "USD" ? `$${r.amount}` : fmt(r.amount)}
                 </td>
@@ -344,6 +445,16 @@ function Recurring({ rows, month, busy, send }: any) {
             <option value="RUB">₽</option>
             <option value="USD">$</option>
           </select>
+          <select
+            className="input w-32"
+            value={f.projectId}
+            onChange={(e) => setF({ ...f, projectId: e.target.value })}
+          >
+            <option value="">общий</option>
+            {projects.map((p: any) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
           <button
             className="btn btn-primary"
             disabled={busy}
@@ -353,7 +464,7 @@ function Recurring({ rows, month, busy, send }: any) {
                 amount: Number(f.amount.replace(",", ".")),
                 fromMonth: month,
               });
-              if (ok) setF({ title: "", amount: "", currency: "RUB" });
+              if (ok) setF({ title: "", amount: "", currency: "RUB", projectId: proj || "" });
             }}
           >
             Добавить
@@ -364,7 +475,7 @@ function Recurring({ rows, month, busy, send }: any) {
   );
 }
 
-function Journal({ rows, month, busy, send }: any) {
+function Journal({ rows, month, busy, send, projects, proj }: any) {
   const today = new Date().toISOString().slice(0, 10);
   const inMonth = month === today.slice(0, 7);
   const [f, setF] = useState({
@@ -374,6 +485,7 @@ function Journal({ rows, month, busy, send }: any) {
     amount: "",
     currency: "RUB",
     date: inMonth ? today : `${month}-01`,
+    projectId: proj || "",
   });
 
   return (
@@ -393,7 +505,9 @@ function Journal({ rows, month, busy, send }: any) {
                 <td className="py-2 text-gray-400 whitespace-nowrap">{r.date.slice(8)}.{r.date.slice(5, 7)}</td>
                 <td className="py-2">
                   {r.title}
-                  <span className="text-xs text-gray-400 ml-2">{r.category}</span>
+                  <span className="text-xs text-gray-400 ml-2">
+                    {r.category}{r.project ? ` · ${r.project}` : ""}
+                  </span>
                 </td>
                 <td className={`py-2 text-right tabular-nums whitespace-nowrap ${r.kind === "in" ? "text-green-700" : ""}`}>
                   {r.kind === "in" ? "+" : "−"}
@@ -450,6 +564,16 @@ function Journal({ rows, month, busy, send }: any) {
         <select className="input w-16" value={f.currency} onChange={(e) => setF({ ...f, currency: e.target.value })}>
           <option value="RUB">₽</option>
           <option value="USD">$</option>
+        </select>
+        <select
+          className="input w-32"
+          value={f.projectId}
+          onChange={(e) => setF({ ...f, projectId: e.target.value })}
+        >
+          <option value="">общий</option>
+          {projects.map((p: any) => (
+            <option key={p.id} value={p.id}>{p.name}</option>
+          ))}
         </select>
         <button
           className="btn btn-primary"

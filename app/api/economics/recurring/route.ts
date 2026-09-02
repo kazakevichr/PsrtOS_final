@@ -28,6 +28,7 @@ export async function POST(req: Request) {
       currency: b.currency === "USD" ? "USD" : "RUB",
       fromMonth,
       toMonth: isMonth(b.toMonth) ? b.toMonth : null,
+      projectId: b.projectId || null,
     },
   });
   return NextResponse.json(cost);

@@ -23,7 +23,11 @@ export async function POST(req: Request) {
   if (!b.userId || !isMonth(b.month)) {
     return NextResponse.json({ error: "Нужны сотрудник и месяц" }, { status: 400 });
   }
-  const data = { totalAmount: total, note: String(b.note || "").trim() };
+  const data = {
+    totalAmount: total,
+    note: String(b.note || "").trim(),
+    projectId: b.projectId || null,
+  };
   const record = await prisma.payrollRecord.upsert({
     where: { userId_month: { userId: b.userId, month: b.month } },
     create: { userId: b.userId, month: b.month, ...data },

@@ -45,40 +45,64 @@ export type CostRow = {
   manual: boolean;  // вводится руками или считается сама
 };
 
-/** Полная картина месяца: приход, расход, прибыль и юнит-метрики. */
-export async function monthMoney(ym: string) {
+/**
+ * Полная картина месяца: приход, расход, прибыль и юнит-метрики.
+ *
+ * projectId сужает всё до одного направления. Общие расходы — те, у кого
+ * проект не проставлен, — в срез направления не попадают: смешивать их
+ * значило бы делить сервер и завод по правилу, которого никто не выбирал.
+ * Завод общий всегда: он делает контент на всю группу.
+ */
+export async function monthMoney(ym: string, projectId?: string) {
   const { start, end } = monthBounds(ym);
   const fx = await fxUsd();
+  const only = projectId ? { projectId } : {};
+  const scoped = Boolean(projectId);
 
   const [txs, ledger, payrollAccrued, payrollPaid, topups, recurring, jobs, newPartners] =
     await Promise.all([
       prisma.transaction.findMany({
-        where: { date: { gte: start, lt: end } },
+        where: {
+          date: { gte: start, lt: end },
+          ...(projectId ? { partner: { projectId } } : {}),
+        },
         select: { revenueAmount: true, ownerProfitAmount: true },
       }),
       prisma.ledger.findMany({
-        where: { date: { gte: start, lt: end } },
+        where: { date: { gte: start, lt: end }, ...only },
         orderBy: { date: "desc" },
+        include: { project: { select: { name: true } } },
       }),
       prisma.payrollRecord.findMany({
-        where: { month: ym },
+        where: { month: ym, ...only },
         include: { user: { select: { name: true } } },
       }),
       prisma.payrollRecord.findMany({
-        where: { paidAt: { gte: start, lt: end } },
+        where: { paidAt: { gte: start, lt: end }, ...only },
         include: { user: { select: { name: true } } },
       }),
-      prisma.walletTopup.findMany({ where: { at: { gte: start, lt: end } } }),
+      // Завод общий: контент идёт на всю группу, поэтому в срез одного
+      // направления его пополнения не попадают.
+      scoped
+        ? Promise.resolve([] as { amount: number }[])
+        : prisma.walletTopup.findMany({ where: { at: { gte: start, lt: end } } }),
       prisma.recurringCost.findMany({
-        where: { fromMonth: { lte: ym }, OR: [{ toMonth: null }, { toMonth: { gte: ym } }] },
+        where: {
+          fromMonth: { lte: ym },
+          OR: [{ toMonth: null }, { toMonth: { gte: ym } }],
+          ...only,
+        },
         orderBy: { amount: "desc" },
+        include: { project: { select: { name: true } } },
       }),
-      prisma.factoryJob.findMany({
-        where: { date: { startsWith: ym }, cost: { gt: 0 } },
-        select: { cost: true },
-      }),
+      scoped
+        ? Promise.resolve([] as { cost: number }[])
+        : prisma.factoryJob.findMany({
+            where: { date: { startsWith: ym }, cost: { gt: 0 } },
+            select: { cost: true },
+          }),
       prisma.partner.findMany({
-        where: { connectedDate: { gte: start, lt: end } },
+        where: { connectedDate: { gte: start, lt: end }, ...only },
         include: { partnerType: true, project: true },
       }),
     ]);
@@ -123,9 +147,11 @@ export async function monthMoney(ym: string) {
       key: "ai",
       label: "ИИ-контент, завод",
       amount: round(aiSpent * fx),
-      source: topups.length
-        ? `${topups.length} ${plural(topups.length, "пополнение", "пополнения", "пополнений")} на $${fmt2(aiSpent)}`
-        : "пополнений не было",
+      source: scoped
+        ? "завод общий — смотри «Все направления»"
+        : topups.length
+          ? `${topups.length} ${plural(topups.length, "пополнение", "пополнения", "пополнений")} на $${fmt2(aiSpent)}`
+          : "пополнений не было",
       manual: false,
     },
     {
@@ -169,13 +195,15 @@ export async function monthMoney(ym: string) {
     : null;
 
   // Окупаемость: за сколько месяцев партнёр возвращает вложенное в него.
-  const activePartners = await prisma.partner.count({ where: { status: "ACTIVE" } });
+  const activePartners = await prisma.partner.count({ where: { status: "ACTIVE", ...only } });
   const perPartner = activePartners ? partnersRevenue / activePartners : 0;
   const payback = partnerCac && perPartner > 0 ? Math.round((partnerCac / perPartner) * 10) / 10 : null;
 
   return {
     month: ym,
     fx,
+    projectId: projectId || null,
+    scoped,
     income: {
       turnover: round(turnover),
       partners: round(partnersRevenue),
@@ -219,6 +247,7 @@ export async function monthMoney(ym: string) {
       amount: l.amount,
       currency: l.currency,
       note: l.note,
+      project: l.project?.name || null,
     })),
     recurring: recurring.map((r) => ({
       id: r.id,
@@ -228,6 +257,7 @@ export async function monthMoney(ym: string) {
       currency: r.currency,
       fromMonth: r.fromMonth,
       toMonth: r.toMonth,
+      project: r.project?.name || null,
     })),
   };
 }
@@ -243,4 +273,77 @@ function plural(n: number, one: string, few: string, many: string) {
   if (b > 1 && b < 5) return few;
   if (b === 1) return one;
   return many;
+}
+
+/**
+ * Сводка по направлениям за месяц: сколько каждое принесло и сколько съело
+ * своими, прямыми расходами. Общие — сервер, завод, зарплата без проекта —
+ * идут отдельной строкой и ни по кому не размазываются: правило разнесения
+ * никто не выбирал, а придуманное молча искажает картину сильнее, чем
+ * честная строка «общие».
+ *
+ * Поэтому в таблице «вклад», а не «прибыль»: это то, что направление даёт
+ * компании до общих расходов.
+ */
+export async function projectSplit(ym: string) {
+  const { start, end } = monthBounds(ym);
+  const fx = await fxUsd();
+
+  const [projects, txs, ledger, payroll, recurring, topups] = await Promise.all([
+    prisma.project.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.transaction.findMany({
+      where: { date: { gte: start, lt: end } },
+      select: { revenueAmount: true, ownerProfitAmount: true, partner: { select: { projectId: true } } },
+    }),
+    prisma.ledger.findMany({ where: { date: { gte: start, lt: end } } }),
+    prisma.payrollRecord.findMany({ where: { paidAt: { gte: start, lt: end } } }),
+    prisma.recurringCost.findMany({
+      where: { fromMonth: { lte: ym }, OR: [{ toMonth: null }, { toMonth: { gte: ym } }] },
+    }),
+    prisma.walletTopup.findMany({ where: { at: { gte: start, lt: end } } }),
+  ]);
+
+  const SHARED = "";
+  const bucket = new Map<string, { income: number; direct: number }>();
+  const slot = (id: string | null) => {
+    const key = id || SHARED;
+    let b = bucket.get(key);
+    if (!b) bucket.set(key, (b = { income: 0, direct: 0 }));
+    return b;
+  };
+
+  for (const t of txs) slot(t.partner.projectId).income += t.ownerProfitAmount;
+  for (const l of ledger) {
+    const rub = toRub(l.amount, l.currency, fx);
+    if (l.kind === "in") slot(l.projectId).income += rub;
+    else slot(l.projectId).direct += rub;
+  }
+  for (const p of payroll) slot(p.projectId).direct += p.totalAmount;
+  for (const r of recurring) slot(r.projectId).direct += toRub(r.amount, r.currency, fx);
+  // Завод общий всегда — отдельного проекта у пополнений нет.
+  slot(null).direct += topups.reduce((s, t) => s + t.amount, 0) * fx;
+
+  const rows = projects.map((p) => {
+    const b = bucket.get(p.id) || { income: 0, direct: 0 };
+    const income = round(b.income);
+    const direct = round(b.direct);
+    return {
+      id: p.id,
+      name: p.name,
+      income,
+      direct,
+      contribution: income - direct,
+      margin: income > 0 ? Math.round(((income - direct) / income) * 1000) / 10 : null,
+    };
+  });
+
+  const shared = bucket.get(SHARED) || { income: 0, direct: 0 };
+  return {
+    rows,
+    shared: { income: round(shared.income), direct: round(shared.direct) },
+  };
 }

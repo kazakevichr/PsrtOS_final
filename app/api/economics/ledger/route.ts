@@ -33,6 +33,7 @@ export async function POST(req: Request) {
       amount,
       currency: b.currency === "USD" ? "USD" : "RUB",
       note: String(b.note || "").trim(),
+      projectId: b.projectId || null,
       byUserId: s.user.id,
     },
   });

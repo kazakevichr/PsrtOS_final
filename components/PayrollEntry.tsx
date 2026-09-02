@@ -12,20 +12,23 @@ export default function PayrollEntry({
   userId,
   month,
   computed,
+  projects,
   record,
 }: {
   userId: string;
   month: string;
   computed: number;
-  record: { id: string; totalAmount: number; paidAt: string | null } | null;
+  projects: { id: string; name: string }[];
+  record: { id: string; totalAmount: number; projectId: string | null; paidAt: string | null } | null;
 }) {
   const router = useRouter();
   const [value, setValue] = useState(record ? String(Math.round(record.totalAmount)) : "");
+  const [proj, setProj] = useState(record?.projectId || "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
   const saved = record ? Math.round(record.totalAmount) : null;
-  const dirty = value !== "" && Number(value) !== saved;
+  const dirty = value !== "" && (Number(value) !== saved || proj !== (record?.projectId || ""));
 
   const post = async (url: string, body: any, method = "POST") => {
     setBusy(true);
@@ -47,7 +50,7 @@ export default function PayrollEntry({
     }
   };
 
-  const save = (total: number) => post("/api/payroll", { userId, month, total });
+  const save = (total: number) => post("/api/payroll", { userId, month, total, projectId: proj || null });
   const markPaid = (paidAt: string | null) =>
     record && post("/api/payroll", { id: record.id, paidAt }, "PATCH");
 
@@ -61,6 +64,17 @@ export default function PayrollEntry({
         onChange={(e) => setValue(e.target.value.replace(/[^\d]/g, ""))}
         aria-label="Сумма к начислению"
       />
+      <select
+        className="input w-36"
+        value={proj}
+        onChange={(e) => setProj(e.target.value)}
+        aria-label="Направление"
+      >
+        <option value="">без направления</option>
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </select>
       <button className="btn btn-primary" disabled={busy || !dirty} onClick={() => save(Number(value))}>
         Сохранить
       </button>

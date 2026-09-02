@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { FX_KEY, isMonth, monthMoney } from "@/lib/ledger";
+import { FX_KEY, isMonth, monthMoney, projectSplit } from "@/lib/ledger";
 
 export const dynamic = "force-dynamic";
 
@@ -13,9 +13,22 @@ async function owner() {
 
 export async function GET(req: Request) {
   if (!(await owner())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const raw = new URL(req.url).searchParams.get("month") || "";
+  const q = new URL(req.url).searchParams;
+  const raw = q.get("month") || "";
   const month = isMonth(raw) ? raw : new Date().toISOString().slice(0, 7);
-  return NextResponse.json(await monthMoney(month));
+  const project = q.get("project") || undefined;
+
+  const [money, split, projects] = await Promise.all([
+    monthMoney(month, project),
+    // Сводка нужна только на экране «Все направления».
+    project ? Promise.resolve(null) : projectSplit(month),
+    prisma.project.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+  return NextResponse.json({ ...money, split, projects });
 }
 
 // Курс доллара: одна настройка на всю бухгалтерию.
