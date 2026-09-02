@@ -5,13 +5,17 @@
 // «почему столько» отвечал сам экран, а не переписка.
 import { useCallback, useEffect, useState } from "react";
 
+// Цвет статьи расхода. Ключ — название категории из журнала, поэтому новая
+// статья не ломает картинку, а просто получает серый.
 const CAT_COLOR: Record<string, string> = {
-  salary: "#2952e3",
-  ai: "#0f9b8e",
-  recurring: "#7c5cd6",
-  ads: "#d97706",
-  other: "#94a3b8",
+  "зарплата": "#2952e3",
+  "нейросети": "#0f9b8e",
+  "recurring": "#7c5cd6",
+  "реклама": "#d97706",
+  "сервис": "#0891b2",
+  "прочее": "#94a3b8",
 };
+const colorOf = (key: string) => CAT_COLOR[key] || "#94a3b8";
 
 const fmt = (n: number) => `${Math.round(n).toLocaleString("ru-RU")} ₽`;
 
@@ -200,7 +204,7 @@ export default function EconomicsView() {
             value={fmt(d.income.total)}
             hint={d.income.other ? `в том числе ${fmt(d.income.other)} прочих` : "продажи партнёров"}
           />
-          <Kpi label="Расходы" value={fmt(d.costs.total)} hint={`зарплаты выплачено ${fmt(d.costs.salaryPaid)}`} />
+          <Kpi label="Расходы" value={fmt(d.costs.total)} hint="всё, что внесено руками" />
           <Kpi
             label={d.scoped ? "Вклад направления" : "Прибыль"}
             value={fmt(d.profit)}
@@ -296,7 +300,7 @@ export default function EconomicsView() {
               {costs.map((r: any) => (
                 <span
                   key={r.key}
-                  style={{ width: `${(r.amount / total) * 100}%`, background: CAT_COLOR[r.key] }}
+                  style={{ width: `${(r.amount / total) * 100}%`, background: colorOf(r.key) }}
                   title={`${r.label}: ${fmt(r.amount)}`}
                 />
               ))}
@@ -316,7 +320,7 @@ export default function EconomicsView() {
                     <td className="py-2">
                       <span
                         className="inline-block w-2 h-2 rounded-sm mr-2 align-middle"
-                        style={{ background: CAT_COLOR[r.key] }}
+                        style={{ background: colorOf(r.key) }}
                       />
                       {r.label}
                     </td>
@@ -340,12 +344,6 @@ export default function EconomicsView() {
                 </tr>
               </tbody>
             </table>
-            {d.periodType === "month" && d.costs.salaryAccrued !== d.costs.salaryPaid && (
-              <p className="text-xs text-gray-500 mt-3">
-                За {monthName(d.month)} начислено зарплаты {fmt(d.costs.salaryAccrued)} — в расходы попадает
-                выплаченное, начисление ждёт отметки о выплате на вкладке «Зарплата».
-              </p>
-            )}
           </>
         )}
       </div>
@@ -636,6 +634,8 @@ function Journal({ rows, month, busy, send, projects, proj }: any) {
           onChange={(e) => setF({ ...f, category: e.target.value })}
         >
           <option value="реклама">реклама</option>
+          <option value="зарплата">зарплата</option>
+          <option value="нейросети">нейросети</option>
           <option value="сервис">сервис</option>
           <option value="продажи">продажи</option>
           <option value="прочее">прочее</option>

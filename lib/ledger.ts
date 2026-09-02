@@ -6,9 +6,12 @@ import { prisma } from "@/lib/prisma";
 // принесло деньги, и то, куда и когда они ушли. Отсюда два следствия,
 // которые легко нарушить по невнимательности:
 //
-//  1. Смета заказов завода (FactoryJob.cost) — это оценка, а не деньги.
-//     В расход идут пополнения кошельков, они же реальные списания.
-//     Сметы остаются метрикой себестоимости и сверкой «залили ↔ сожгли».
+//  1. РАСХОДЫ ТОЛЬКО РУЧНЫЕ (решение Романа 02.09). Ни пополнения кошельков
+//     завода, ни начисления зарплаты сюда не подтягиваются: пополнение
+//     кошелька общее и не ложится на направление, а зарплата в таблице то
+//     есть, то нет — и то и другое давало картину, которой нельзя верить.
+//     Считаются только журнал денег и справочник постоянных платежей.
+//     Смета заказов завода осталась метрикой себестоимости ролика.
 //
 //  2. Доля партнёра вычитается ещё внутри ownerProfitAmount. Если записать
 //     партнёрские выплаты в расходы, они посчитаются дважды. Поэтому верх
@@ -86,7 +89,7 @@ export async function monthMoney(span: Span, projectId?: string) {
   const only = projectId ? { projectId } : {};
   const scoped = Boolean(projectId);
 
-  const [txs, ledger, payrollAccrued, payrollPaid, topups, recurring, jobs, newPartners] =
+  const [txs, ledger, recurring, jobs, newPartners] =
     await Promise.all([
       prisma.transaction.findMany({
         where: {
@@ -100,19 +103,6 @@ export async function monthMoney(span: Span, projectId?: string) {
         orderBy: { date: "desc" },
         include: { project: { select: { name: true } } },
       }),
-      prisma.payrollRecord.findMany({
-        where: { month: { in: months }, ...only },
-        include: { user: { select: { name: true } } },
-      }),
-      prisma.payrollRecord.findMany({
-        where: { paidAt: { gte: start, lt: end }, ...only },
-        include: { user: { select: { name: true } } },
-      }),
-      // Завод общий: контент идёт на всю группу, поэтому в срез одного
-      // направления его пополнения не попадают.
-      scoped
-        ? Promise.resolve([] as { amount: number }[])
-        : prisma.walletTopup.findMany({ where: { at: { gte: start, lt: end } } }),
       prisma.recurringCost.findMany({
         where: {
           fromMonth: { lte: months[months.length - 1] },
@@ -146,13 +136,8 @@ export async function monthMoney(span: Span, projectId?: string) {
   const income = partnersRevenue + otherIncome;
 
   // ── Расходы ───────────────────────────────────────────────────────────
-  // Зарплата в расход месяца попадает по дате выплаты; начисленное за месяц
-  // показываем рядом, чтобы была видна себестоимость самого месяца.
-  const salaryPaid = payrollPaid.reduce((s, p) => s + p.totalAmount, 0);
-  const salaryAccrued = payrollAccrued.reduce((s, p) => s + p.totalAmount, 0);
-  const aiSpent = topups.reduce((s, t) => s + t.amount, 0); // в долларах
-  // За неполный месяц постоянный платёж считаем пропорционально дням:
-  // иначе недельный отчёт съел бы весь месячный сервер разом.
+  // Только то, что внесено руками: журнал денег плюс справочник постоянных
+  // платежей. Ничего не подтягивается со стороны — см. заметку наверху файла.
   const recurringRub = recurring.reduce((s, r) => s + toRub(r.amount, r.currency, fx), 0) * share;
 
   const out = ledger.filter((l) => l.kind === "out");
@@ -161,56 +146,32 @@ export async function monthMoney(span: Span, projectId?: string) {
     byCategory.set(l.category, (byCategory.get(l.category) || 0) + toRub(l.amount, l.currency, fx));
   }
   const ads = byCategory.get("реклама") || 0;
-  const manualRest = [...byCategory.entries()]
-    .filter(([c]) => c !== "реклама")
-    .reduce((s, [, v]) => s + v, 0);
 
-  const rows: CostRow[] = [
-    {
-      key: "salary",
-      label: "Зарплата команды",
-      amount: round(salaryPaid),
-      source: payrollPaid.length
-        ? `выплачено ${payrollPaid.length} ${plural(payrollPaid.length, "человеку", "людям", "людям")}`
-        : "в этом месяце выплат не отмечено",
-      manual: true,
-    },
-    {
-      key: "ai",
-      label: "ИИ-контент, завод",
-      amount: round(aiSpent * fx),
-      source: scoped
-        ? "завод общий — смотри «Все направления»"
-        : topups.length
-          ? `${topups.length} ${plural(topups.length, "пополнение", "пополнения", "пополнений")} на $${fmt2(aiSpent)}`
-          : "пополнений не было",
-      manual: false,
-    },
-    {
-      key: "recurring",
-      label: "Сервер и сервисы",
-      amount: round(recurringRub),
-      source: recurring.length
-        ? `${recurring.length} ${plural(recurring.length, "платёж", "платежа", "платежей")} в справочнике` +
-          (span.type === "month" ? "" : " · доля периода")
-        : "справочник пуст",
-      manual: true,
-    },
-    {
-      key: "ads",
-      label: "Реклама",
-      amount: round(ads),
-      source: ads ? "журнал расходов" : "записей нет",
-      manual: true,
-    },
-    {
-      key: "other",
-      label: "Прочее",
-      amount: round(manualRest),
-      source: manualRest ? "журнал расходов" : "записей нет",
-      manual: true,
-    },
-  ];
+  // Строка на каждую статью, по которой в периоде есть записи, плюс отдельно
+  // постоянные платежи: у них своя природа и свой справочник.
+  const rows: CostRow[] = [...byCategory.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([category, sum]) => {
+      const n = out.filter((l) => l.category === category).length;
+      return {
+        key: category,
+        label: category.charAt(0).toUpperCase() + category.slice(1),
+        amount: round(sum),
+        source: `${n} ${plural(n, "запись", "записи", "записей")} в журнале`,
+        manual: true,
+      };
+    });
+
+  rows.push({
+    key: "recurring",
+    label: "Постоянные платежи",
+    amount: round(recurringRub),
+    source: recurring.length
+      ? `${recurring.length} ${plural(recurring.length, "платёж", "платежа", "платежей")} в справочнике` +
+        (span.type === "month" ? "" : " · доля периода")
+      : "справочник пуст",
+    manual: true,
+  });
 
   const costs = rows.reduce((s, r) => s + r.amount, 0);
   const profit = round(income) - costs;
@@ -248,9 +209,6 @@ export async function monthMoney(span: Span, projectId?: string) {
     costs: {
       total: costs,
       rows,
-      salaryAccrued: round(salaryAccrued),
-      salaryPaid: round(salaryPaid),
-      aiUsd: Math.round(aiSpent * 100) / 100,
     },
     profit,
     margin: income > 0 ? Math.round((profit / income) * 1000) / 10 : null,
@@ -264,14 +222,6 @@ export async function monthMoney(span: Span, projectId?: string) {
       ads: round(ads),
       payback,
     },
-    payroll: payrollAccrued.map((p) => ({
-      id: p.id,
-      userId: p.userId,
-      name: p.user.name,
-      total: p.totalAmount,
-      note: p.note,
-      paidAt: p.paidAt ? p.paidAt.toISOString().slice(0, 10) : null,
-    })),
     ledger: ledger.map((l) => ({
       id: l.id,
       kind: l.kind,
@@ -326,7 +276,7 @@ export async function projectSplit(span: Span) {
   const share = monthShare(span);
   const fx = await fxUsd();
 
-  const [projects, txs, ledger, payroll, recurring, topups] = await Promise.all([
+  const [projects, txs, ledger, recurring] = await Promise.all([
     prisma.project.findMany({
       where: { isActive: true },
       select: { id: true, name: true },
@@ -337,14 +287,12 @@ export async function projectSplit(span: Span) {
       select: { revenueAmount: true, ownerProfitAmount: true, partner: { select: { projectId: true } } },
     }),
     prisma.ledger.findMany({ where: { date: { gte: start, lt: end } } }),
-    prisma.payrollRecord.findMany({ where: { paidAt: { gte: start, lt: end } } }),
     prisma.recurringCost.findMany({
       where: {
         fromMonth: { lte: months[months.length - 1] },
         OR: [{ toMonth: null }, { toMonth: { gte: months[0] } }],
       },
     }),
-    prisma.walletTopup.findMany({ where: { at: { gte: start, lt: end } } }),
   ]);
 
   const SHARED = "";
@@ -362,10 +310,7 @@ export async function projectSplit(span: Span) {
     if (l.kind === "in") slot(l.projectId).income += rub;
     else slot(l.projectId).direct += rub;
   }
-  for (const p of payroll) slot(p.projectId).direct += p.totalAmount;
   for (const r of recurring) slot(r.projectId).direct += toRub(r.amount, r.currency, fx) * share;
-  // Завод общий всегда — отдельного проекта у пополнений нет.
-  slot(null).direct += topups.reduce((s, t) => s + t.amount, 0) * fx;
 
   const rows = projects.map((p) => {
     const b = bucket.get(p.id) || { income: 0, direct: 0 };

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-const CATEGORIES = ["реклама", "сервис", "прочее", "продажи"];
+const CATEGORIES = ["реклама", "зарплата", "нейросети", "сервис", "прочее", "продажи"];
 
 export async function POST(req: Request) {
   const s = await getServerSession(authOptions);
