@@ -4,6 +4,7 @@
 // платформа, проект, профиль — плюс период. Кнопки сбора нет: данные
 // обновляет сам сервер каждые 20 минут (instrumentation.ts).
 import { useEffect, useMemo, useState } from "react";
+import PeriodPicker, { Range, rangeDays, rangeFor } from "@/components/PeriodPicker";
 
 const BRAND_NAMES: Record<string, string> = {
   superfit: "СуперФит",
@@ -74,7 +75,7 @@ function humanError(e: string): string {
 
 export default function SocialDashboard({ canManage = true }: { canManage?: boolean }) {
   const [all, setAll] = useState<any[]>([]);
-  const [period, setPeriod] = useState(7);
+  const [range, setRange] = useState<Range>(() => rangeFor("7"));
   const [platform, setPlatform] = useState("all");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
@@ -130,10 +131,17 @@ export default function SocialDashboard({ canManage = true }: { canManage?: bool
     if (profile !== "all" && !profileOptions.some((a) => a.id === profile)) setProfile("all");
   }, [profileOptions, profile]);
 
-  const edgeDate = new Date(Date.now() - period * 864e5).toISOString().slice(0, 10);
-  const edgeIso = new Date(Date.now() - period * 864e5).toISOString();
-  const prevEdgeDate = new Date(Date.now() - 2 * period * 864e5).toISOString().slice(0, 10);
-  const prevEdgeIso = new Date(Date.now() - 2 * period * 864e5).toISOString();
+  // Границы периода: обе включительно. Прошлый период — такой же длины,
+  // приставленный слева, чтобы сравнение было честным при любом диапазоне.
+  const period = rangeDays(range);
+  const edgeDate = range.from;
+  const topDate = range.to;
+  const edgeIso = `${range.from}T00:00:00.000Z`;
+  const topIso = `${range.to}T23:59:59.999Z`;
+  const shift = (date: string, days: number) =>
+    new Date(Date.parse(`${date}T00:00:00Z`) - days * 864e5).toISOString().slice(0, 10);
+  const prevEdgeDate = shift(edgeDate, period);
+  const prevEdgeIso = `${prevEdgeDate}T00:00:00.000Z`;
 
   const followers = accounts.reduce((s, a) => s + (a.followers || 0), 0);
   const fDelta = useMemo(() => {
@@ -148,8 +156,8 @@ export default function SocialDashboard({ canManage = true }: { canManage?: bool
     return now - then;
   }, [accounts, edgeDate]);
 
-  const sumHist = (field: string, from = edgeDate, to = "9999") =>
-    accounts.reduce((s, a) => s + (a.history || []).filter((h: any) => h.date >= from && h.date < to).reduce((x: number, h: any) => x + (h[field] || 0), 0), 0);
+  const sumHist = (field: string, from = edgeDate, to = topDate) =>
+    accounts.reduce((s, a) => s + (a.history || []).filter((h: any) => h.date >= from && h.date <= to).reduce((x: number, h: any) => x + (h[field] || 0), 0), 0);
 
   const posts = useMemo(
     () => accounts
@@ -158,7 +166,7 @@ export default function SocialDashboard({ canManage = true }: { canManage?: bool
       .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || "")),
     [accounts]
   );
-  const periodPosts = posts.filter((p) => p.timestamp >= edgeIso);
+  const periodPosts = posts.filter((p) => p.timestamp >= edgeIso && p.timestamp <= topIso);
   const prevPosts = posts.filter((p) => p.timestamp >= prevEdgeIso && p.timestamp < edgeIso);
   const sumPosts = (f: string, list = periodPosts) => list.reduce((s, p) => s + (p[f] || 0), 0);
 
@@ -171,7 +179,7 @@ export default function SocialDashboard({ canManage = true }: { canManage?: bool
     {
       label: `Просмотры за ${period} дн`,
       value: fmt(sumHist("views")),
-      delta: { cur: sumHist("views"), prev: sumHist("views", prevEdgeDate, edgeDate) },
+      delta: { cur: sumHist("views"), prev: sumHist("views", prevEdgeDate, shift(edgeDate, 1)) },
       note: sumHist("views") === 0 && sumPosts("views") > 0 ? "история копится с 19.08" : "",
     },
     {
@@ -188,14 +196,14 @@ export default function SocialDashboard({ canManage = true }: { canManage?: bool
     const byDate: Record<string, { views: number; reach: number }> = {};
     for (const a of accounts) {
       for (const h of a.history || []) {
-        if (h.date < edgeDate) continue;
+        if (h.date < edgeDate || h.date > topDate) continue;
         const d = (byDate[h.date] ||= { views: 0, reach: 0 });
         d.views += h.views || 0;
         d.reach += h.reach || 0;
       }
     }
     return Object.entries(byDate).sort(([a], [b]) => a.localeCompare(b));
-  }, [accounts, edgeDate]);
+  }, [accounts, edgeDate, topDate]);
 
   const factoryStatus = useMemo(() => {
     if (platform !== "all" && platform !== "instagram") return null;
@@ -216,7 +224,7 @@ export default function SocialDashboard({ canManage = true }: { canManage?: bool
     return Object.entries(m);
   }, [posts]);
 
-  const scope = `${platform}|${brand}|${profile}|${period}`;
+  const scope = `${platform}|${brand}|${profile}|${range.from}|${range.to}`;
   useEffect(() => {
   }, [scope]);
 
@@ -269,14 +277,7 @@ export default function SocialDashboard({ canManage = true }: { canManage?: bool
       {note && <p className="text-sm text-gray-500">{note}</p>}
 
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex gap-1 bg-white border rounded-lg p-0.5">
-          {[7, 14, 30, 90].map((d) => (
-            <button key={d} onClick={() => setPeriod(d)}
-              className={`px-2.5 py-1 rounded-md text-sm ${d === period ? "bg-brand-600 text-white" : "hover:bg-gray-50"}`}>
-              {d} дн
-            </button>
-          ))}
-        </div>
+        <PeriodPicker value={range} onChange={setRange} />
         <button className={chip(platform === "all")} onClick={() => setPlatform("all")}>Все платформы</button>
         {platforms.map((p) => (
           <button key={p} className={chip(platform === p)} onClick={() => setPlatform(p)}>{PLATFORM_NAMES[p] || p}</button>
@@ -382,7 +383,7 @@ export default function SocialDashboard({ canManage = true }: { canManage?: bool
                 {a.source === "factory" ? " · 🏭" : ""}
               </div>
               {(() => {
-                const hist = (a.history || []).filter((h: any) => h.date >= edgeDate && h.followers != null);
+                const hist = (a.history || []).filter((h: any) => h.date >= edgeDate && h.date <= topDate && h.followers != null);
                 if (hist.length < 2) return null;
                 const first = hist[0].followers;
                 const last = hist[hist.length - 1].followers;
@@ -396,9 +397,9 @@ export default function SocialDashboard({ canManage = true }: { canManage?: bool
             </div>
             {(() => {
               const pts = (a.history || [])
-                .filter((h: any) => h.date >= edgeDate)
+                .filter((h: any) => h.date >= edgeDate && h.date <= topDate)
                 .map((h: any) => h.views ?? h.followers ?? 0);
-              const fh = (a.history || []).filter((h: any) => h.date >= edgeDate && h.followers != null);
+              const fh = (a.history || []).filter((h: any) => h.date >= edgeDate && h.date <= topDate && h.followers != null);
               const up = fh.length >= 2 ? fh[fh.length - 1].followers >= fh[0].followers : true;
               return <Spark points={pts} up={up} />;
             })()}

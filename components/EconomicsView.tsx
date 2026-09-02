@@ -4,6 +4,7 @@
 // ушло и когда. Каждая строка расхода подписана источником — чтобы на вопрос
 // «почему столько» отвечал сам экран, а не переписка.
 import { useCallback, useEffect, useState } from "react";
+import PeriodPicker, { Range, rangeFor } from "@/components/PeriodPicker";
 
 // Цвет статьи расхода. Ключ — название категории из журнала, поэтому новая
 // статья не ломает картинку, а просто получает серый.
@@ -18,29 +19,6 @@ const CAT_COLOR: Record<string, string> = {
 const colorOf = (key: string) => CAT_COLOR[key] || "#94a3b8";
 
 const fmt = (n: number) => `${Math.round(n).toLocaleString("ru-RU")} ₽`;
-
-// Якорь периода: на сколько шагов назад от сегодня и в каких единицах.
-const anchorOf = (type: string, back: number) => {
-  const d = new Date();
-  if (/^\d+d$/.test(type)) return "";
-  if (type === "month") {
-    d.setUTCDate(1);
-    d.setUTCMonth(d.getUTCMonth() - back);
-    return d.toISOString().slice(0, 7);
-  }
-  d.setUTCDate(d.getUTCDate() - back * (type === "week" ? 7 : 1));
-  return d.toISOString().slice(0, 10);
-};
-
-const PERIODS: [string, string][] = [
-  ["day", "день"],
-  ["7d", "7 дн"],
-  ["30d", "30 дн"],
-  ["90d", "90 дн"],
-  ["month", "месяц"],
-  ["all", "всё время"],
-];
-const isWindow = (t: string) => /^\d+d$/.test(t) || t === "all";
 
 // «сентябрь 2026» — без хвостового «г.», иначе css-capitalize делает «Г.»
 const monthName = (label: string) => {
@@ -59,24 +37,20 @@ const monthTitle = (label: string) => {
 };
 
 export default function EconomicsView() {
-  const [back, setBack] = useState(0);
-  const [type, setType] = useState("month");
+  const [range, setRange] = useState<Range>(() => rangeFor("month"));
   const [proj, setProj] = useState("");
   const [d, setD] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [sync, setSync] = useState<any[] | null>(null);
 
-  const month = anchorOf(type, back);
-
   const load = useCallback(() => {
     const q = proj ? `&project=${proj}` : "";
-    const when = isWindow(type) ? `back=${back}` : `anchor=${month}`;
-    fetch(`/api/economics?period=${type}&${when}${q}`)
+    fetch(`/api/economics?from=${range.from}&to=${range.to}${q}`)
       .then((r) => r.json())
       .then(setD)
       .catch(() => setErr("Не получилось загрузить период"));
-  }, [type, month, back, proj]);
+  }, [range.from, range.to, proj]);
 
   useEffect(() => {
     setD(null);
@@ -155,17 +129,7 @@ export default function EconomicsView() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {PERIODS.map(([k, label]) => (
-              <button
-                key={k}
-                className={`btn text-xs ${type === k ? "btn-primary" : "btn-secondary"}`}
-                onClick={() => { setType(k); setBack(0); }}
-              >
-                {label}
-              </button>
-            ))}
-            <button className="btn btn-secondary text-xs" disabled={type === "all"} onClick={() => setBack(back + 1)}>←</button>
-            <button className="btn btn-secondary text-xs" disabled={back === 0 || type === "all"} onClick={() => setBack(back - 1)}>→</button>
+            <PeriodPicker value={range} onChange={setRange} />
             <FxInput fx={d.fx} busy={busy} onSave={(fx) => send("/api/economics", "POST", { fx })} />
             <button
               className="btn btn-secondary text-xs"
@@ -178,7 +142,7 @@ export default function EconomicsView() {
                   const r = await fetch("/api/economics/sync", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ period: type, anchor: month, back }),
+                    body: JSON.stringify({ from: range.from, to: range.to }),
                   });
                   const j = await r.json();
                   if (!r.ok) setErr(j.error || "Не получилось обновить");

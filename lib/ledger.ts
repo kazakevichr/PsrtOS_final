@@ -63,6 +63,14 @@ export async function allSpan(): Promise<Span> {
   return { start, end, type: "all", label: `${d(start)} – ${d(new Date(end.getTime() - 864e5))}` };
 }
 
+/** Произвольный диапазон, обе границы включительно. */
+export function rangeSpan(from: string, to: string): Span {
+  const start = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  end.setUTCDate(end.getUTCDate() + 1);
+  return { start, end, type: "days", label: `${from} – ${to}` };
+}
+
 /** Окно в N последних дней — для дашборда «7 / 30 / 90 дней». */
 export function daysSpan(n: number, back = 0): Span {
   const today = new Date();

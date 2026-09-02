@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { FX_KEY, allSpan, daysSpan, monthMoney, projectSplit, Span } from "@/lib/ledger";
+import { FX_KEY, allSpan, daysSpan, monthMoney, projectSplit, rangeSpan, Span } from "@/lib/ledger";
 import { resolvePeriod, PeriodType } from "@/lib/economics";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,13 @@ export async function GET(req: Request) {
   const raw = q.get("period") || "month";
   const back = Math.max(0, Number(q.get("back") || 0));
   const n = /^(\d+)d$/.exec(raw);
-  const span: Span = raw === "all"
+  const from = q.get("from") || "";
+  const to = q.get("to") || "";
+  const isDate = (x: string) => /^\d{4}-\d{2}-\d{2}$/.test(x);
+
+  const span: Span = isDate(from) && isDate(to)
+    ? rangeSpan(from, to)
+    : raw === "all"
     ? await allSpan()
     : n
     ? daysSpan(Number(n[1]), back)
