@@ -59,15 +59,36 @@ const days = (span: Span) => {
   return out;
 };
 
-/** Пары ключей сайтов CloudPayments: "pk1:secret1;pk2:secret2". */
+/**
+ * Пары ключей сайтов CloudPayments. Канонический вид —
+ * "pk_первый:пароль1;pk_второй:пароль2", но разделитель тут — вечный источник
+ * опечаток, а перевыпуск ключей из-за неверной точки с запятой дороже, чем
+ * терпимый разбор. Public ID всегда начинается с «pk_», пароль — никогда,
+ * поэтому пары собираются однозначно: любой разделитель, любой порядок строк.
+ */
 function cpKeys() {
-  const raw = `${env("INCOME_CP_PUBLIC_ID")}:${env("INCOME_CP_API_SECRET")}`;
-  const many = env("INCOME_CP_KEYS");
-  const pairs = (many || raw)
-    .split(";")
-    .map((p) => p.trim())
-    .filter((p) => p.includes(":") && p.length > 3);
-  if (!pairs.length) throw new Error("не заданы ключи CloudPayments");
+  const source =
+    env("INCOME_CP_KEYS") ||
+    `${env("INCOME_CP_PUBLIC_ID")}:${env("INCOME_CP_API_SECRET")}`;
+
+  const tokens = source.split(/[;:,\s]+/).map((t) => t.trim()).filter(Boolean);
+  const pairs: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    if (!tokens[i].startsWith("pk_")) continue;
+    const secret = tokens[i + 1];
+    if (secret && !secret.startsWith("pk_")) {
+      pairs.push(`${tokens[i]}:${secret}`);
+      i++;
+    }
+  }
+
+  if (!pairs.length) {
+    throw new Error(
+      tokens.length
+        ? "в ключах CloudPayments не нашлось пары «pk_… и пароль»"
+        : "не заданы ключи CloudPayments"
+    );
+  }
   return pairs;
 }
 
