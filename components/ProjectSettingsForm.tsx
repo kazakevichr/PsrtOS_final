@@ -71,6 +71,14 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
     router.refresh();
   }
 
+  const Block = ({ title, note }: { title: string; note: string }) => (
+    <div className="border-t pt-3 first:border-0">
+      <h4 className="text-sm font-semibold">
+        {title} <span className="text-gray-400 font-normal">· {note}</span>
+      </h4>
+    </div>
+  );
+
   return (
     <div className="card space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -90,6 +98,7 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
         </label>
       </div>
 
+      <Block title="Бухгалтерия" note="как считается доход направления" />
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
         <label className="flex flex-col gap-1">
           Валюта
@@ -118,6 +127,10 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
           % владельца от остатка
           <input className="input" type="number" value={form.ownerProfitPercent} onChange={(e) => set("ownerProfitPercent", Number(e.target.value) as any)} />
         </label>
+      </div>
+
+      <Block title="Партнёрский менеджмент" note="KPI и бонусы менеджеров" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
         <label className="flex flex-col gap-1">
           KPI включён
           <select className="input" value={String(form.kpiEnabled)} onChange={(e) => set("kpiEnabled", (e.target.value === "true") as any)}>
@@ -154,11 +167,12 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
         </label>
       </div>
 
-      <button className="btn btn-primary" disabled={busy} onClick={save}>Сохранить настройки</button>
+      <button className="btn btn-primary" disabled={busy} onClick={save}>Сохранить настройки проекта</button>
 
       <div className="border-t pt-3">
         <h4 className="text-sm font-semibold mb-2">
-          База знаний по проекту <span className="text-gray-400 font-normal">(видна менеджерам и используется ИИ-помощником)</span>
+          База знаний по проекту{" "}
+          <span className="text-gray-400 font-normal">· видна менеджерам и используется ИИ-помощником</span>
         </h4>
         <textarea
           className="input"
@@ -177,7 +191,10 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
       </div>
 
       <div className="border-t pt-3">
-        <h4 className="text-sm font-semibold mb-2">Типы партнёров (для KPI по типу, напр. Музлото)</h4>
+        <h4 className="text-sm font-semibold mb-2">
+          Типы партнёров{" "}
+          <span className="text-gray-400 font-normal">· своя сумма KPI за партнёра этого типа</span>
+        </h4>
         <div className="space-y-1 text-sm mb-2">
           {form.partnerTypes.map((t) => (
             <div key={t.id} className="flex justify-between">

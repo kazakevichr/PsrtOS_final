@@ -18,7 +18,7 @@ export default async function ProjectSettingsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold">Настройки проектов</h1>
+        <h1 className="text-xl font-bold">Настройка проектов</h1>
         <Link href="/settings/users" className="btn btn-secondary">Сотрудники →</Link>
       </div>
       <div className="space-y-4">

@@ -68,7 +68,7 @@ export default async function Navbar() {
     navLink("/settings/users", "Сотрудники"),
     navLink("/payroll", "Зарплата"),
     navLink("/economics", "Бухгалтерия"),
-    navLink("/settings/projects", "Настройки"),
+    navLink("/settings/projects", "Настройка проекта"),
   ];
 
   // Владелец видит всё; менеджер партнёров — только партнёрский блок и свою
