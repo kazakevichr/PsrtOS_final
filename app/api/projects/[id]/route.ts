@@ -12,6 +12,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 
   const body = await req.json();
   const allowed = [
+    "name",
+    "isActive",
     "currency",
     "partnerCommissionPercent",
     "ownerProfitPercent",

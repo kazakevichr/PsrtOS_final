@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { FX_KEY, isMonth, monthMoney, projectSplit } from "@/lib/ledger";
+import { FX_KEY, monthMoney, projectSplit, Span } from "@/lib/ledger";
+import { resolvePeriod, PeriodType } from "@/lib/economics";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +15,16 @@ async function owner() {
 export async function GET(req: Request) {
   if (!(await owner())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const q = new URL(req.url).searchParams;
-  const raw = q.get("month") || "";
-  const month = isMonth(raw) ? raw : new Date().toISOString().slice(0, 7);
+  const type = (["day", "week", "month"].includes(q.get("period") || "")
+    ? q.get("period")
+    : "month") as PeriodType;
+  const span: Span = { ...resolvePeriod(type, q.get("anchor") || undefined), type };
   const project = q.get("project") || undefined;
 
   const [money, split, projects] = await Promise.all([
-    monthMoney(month, project),
+    monthMoney(span, project),
     // Сводка нужна только на экране «Все направления».
-    project ? Promise.resolve(null) : projectSplit(month),
+    project ? Promise.resolve(null) : projectSplit(span),
     prisma.project.findMany({
       where: { isActive: true },
       select: { id: true, name: true },

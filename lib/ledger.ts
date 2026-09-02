@@ -31,6 +31,30 @@ export function monthBounds(ym: string) {
 
 export const isMonth = (s: string) => /^\d{4}-\d{2}$/.test(s);
 
+// Период отчёта. Месяц остаётся основным — зарплата и постоянные платежи
+// живут месяцами, — но день и неделю тоже нужно уметь показать.
+export type Span = { start: Date; end: Date; label: string; type: "day" | "week" | "month" };
+
+/** Доля месяца, которую занимает период: постоянные платежи делим по дням. */
+export function monthShare(span: Span) {
+  if (span.type === "month") return 1;
+  const days = Math.max(1, Math.round((span.end.getTime() - span.start.getTime()) / 864e5));
+  const inMonth = new Date(Date.UTC(span.start.getUTCFullYear(), span.start.getUTCMonth() + 1, 0)).getUTCDate();
+  return days / inMonth;
+}
+
+/** Месяцы, которые задевает период — для таблиц, где ключ это «ГГГГ-ММ». */
+export function monthsOf(span: Span): string[] {
+  const out: string[] = [];
+  const d = new Date(Date.UTC(span.start.getUTCFullYear(), span.start.getUTCMonth(), 1));
+  const last = new Date(span.end.getTime() - 1);
+  while (d <= last) {
+    out.push(d.toISOString().slice(0, 7));
+    d.setUTCMonth(d.getUTCMonth() + 1);
+  }
+  return out.length ? out : [span.start.toISOString().slice(0, 7)];
+}
+
 /** Приводим запись к рублям: в журнале можно вести и долларовые траты. */
 const toRub = (amount: number, currency: string, fx: number) =>
   currency === "USD" ? amount * fx : amount;
@@ -53,8 +77,11 @@ export type CostRow = {
  * значило бы делить сервер и завод по правилу, которого никто не выбирал.
  * Завод общий всегда: он делает контент на всю группу.
  */
-export async function monthMoney(ym: string, projectId?: string) {
-  const { start, end } = monthBounds(ym);
+export async function monthMoney(span: Span, projectId?: string) {
+  const { start, end } = span;
+  const ym = span.label;
+  const months = monthsOf(span);
+  const share = monthShare(span);
   const fx = await fxUsd();
   const only = projectId ? { projectId } : {};
   const scoped = Boolean(projectId);
@@ -74,7 +101,7 @@ export async function monthMoney(ym: string, projectId?: string) {
         include: { project: { select: { name: true } } },
       }),
       prisma.payrollRecord.findMany({
-        where: { month: ym, ...only },
+        where: { month: { in: months }, ...only },
         include: { user: { select: { name: true } } },
       }),
       prisma.payrollRecord.findMany({
@@ -88,8 +115,8 @@ export async function monthMoney(ym: string, projectId?: string) {
         : prisma.walletTopup.findMany({ where: { at: { gte: start, lt: end } } }),
       prisma.recurringCost.findMany({
         where: {
-          fromMonth: { lte: ym },
-          OR: [{ toMonth: null }, { toMonth: { gte: ym } }],
+          fromMonth: { lte: months[months.length - 1] },
+          OR: [{ toMonth: null }, { toMonth: { gte: months[0] } }],
           ...only,
         },
         orderBy: { amount: "desc" },
@@ -98,7 +125,10 @@ export async function monthMoney(ym: string, projectId?: string) {
       scoped
         ? Promise.resolve([] as { cost: number }[])
         : prisma.factoryJob.findMany({
-            where: { date: { startsWith: ym }, cost: { gt: 0 } },
+            where: {
+              date: { gte: start.toISOString().slice(0, 10), lt: end.toISOString().slice(0, 10) },
+              cost: { gt: 0 },
+            },
             select: { cost: true },
           }),
       prisma.partner.findMany({
@@ -121,7 +151,9 @@ export async function monthMoney(ym: string, projectId?: string) {
   const salaryPaid = payrollPaid.reduce((s, p) => s + p.totalAmount, 0);
   const salaryAccrued = payrollAccrued.reduce((s, p) => s + p.totalAmount, 0);
   const aiSpent = topups.reduce((s, t) => s + t.amount, 0); // в долларах
-  const recurringRub = recurring.reduce((s, r) => s + toRub(r.amount, r.currency, fx), 0);
+  // За неполный месяц постоянный платёж считаем пропорционально дням:
+  // иначе недельный отчёт съел бы весь месячный сервер разом.
+  const recurringRub = recurring.reduce((s, r) => s + toRub(r.amount, r.currency, fx), 0) * share;
 
   const out = ledger.filter((l) => l.kind === "out");
   const byCategory = new Map<string, number>();
@@ -159,7 +191,8 @@ export async function monthMoney(ym: string, projectId?: string) {
       label: "Сервер и сервисы",
       amount: round(recurringRub),
       source: recurring.length
-        ? `${recurring.length} ${plural(recurring.length, "платёж", "платежа", "платежей")} в справочнике`
+        ? `${recurring.length} ${plural(recurring.length, "платёж", "платежа", "платежей")} в справочнике` +
+          (span.type === "month" ? "" : " · доля периода")
         : "справочник пуст",
       manual: true,
     },
@@ -201,6 +234,7 @@ export async function monthMoney(ym: string, projectId?: string) {
 
   return {
     month: ym,
+    periodType: span.type,
     fx,
     projectId: projectId || null,
     scoped,
@@ -286,8 +320,10 @@ function plural(n: number, one: string, few: string, many: string) {
  * Поэтому в таблице «вклад», а не «прибыль»: это то, что направление даёт
  * компании до общих расходов.
  */
-export async function projectSplit(ym: string) {
-  const { start, end } = monthBounds(ym);
+export async function projectSplit(span: Span) {
+  const { start, end } = span;
+  const months = monthsOf(span);
+  const share = monthShare(span);
   const fx = await fxUsd();
 
   const [projects, txs, ledger, payroll, recurring, topups] = await Promise.all([
@@ -303,7 +339,10 @@ export async function projectSplit(ym: string) {
     prisma.ledger.findMany({ where: { date: { gte: start, lt: end } } }),
     prisma.payrollRecord.findMany({ where: { paidAt: { gte: start, lt: end } } }),
     prisma.recurringCost.findMany({
-      where: { fromMonth: { lte: ym }, OR: [{ toMonth: null }, { toMonth: { gte: ym } }] },
+      where: {
+        fromMonth: { lte: months[months.length - 1] },
+        OR: [{ toMonth: null }, { toMonth: { gte: months[0] } }],
+      },
     }),
     prisma.walletTopup.findMany({ where: { at: { gte: start, lt: end } } }),
   ]);
@@ -324,7 +363,7 @@ export async function projectSplit(ym: string) {
     else slot(l.projectId).direct += rub;
   }
   for (const p of payroll) slot(p.projectId).direct += p.totalAmount;
-  for (const r of recurring) slot(r.projectId).direct += toRub(r.amount, r.currency, fx);
+  for (const r of recurring) slot(r.projectId).direct += toRub(r.amount, r.currency, fx) * share;
   // Завод общий всегда — отдельного проекта у пополнений нет.
   slot(null).direct += topups.reduce((s, t) => s + t.amount, 0) * fx;
 

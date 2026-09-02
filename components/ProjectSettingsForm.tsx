@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 type Project = {
   id: string;
   name: string;
+  isActive: boolean;
   currency: string;
   incomeSource: string | null;
   partnerCommissionPercent: number;
@@ -37,6 +38,8 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        name: form.name.trim(),
+        isActive: form.isActive,
         currency: form.currency,
         incomeSource: form.incomeSource || null,
         partnerCommissionPercent: Number(form.partnerCommissionPercent),
@@ -70,7 +73,22 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
 
   return (
     <div className="card space-y-3">
-      <h3 className="font-semibold">{project.name}</h3>
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          className="input flex-1 min-w-[220px] font-semibold"
+          value={form.name}
+          onChange={(e) => set("name", e.target.value as any)}
+          aria-label="Название направления"
+        />
+        <label className="flex items-center gap-2 text-sm text-gray-500">
+          <input
+            type="checkbox"
+            checked={form.isActive}
+            onChange={(e) => set("isActive", e.target.checked as any)}
+          />
+          активно
+        </label>
+      </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
         <label className="flex flex-col gap-1">

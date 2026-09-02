@@ -15,41 +15,54 @@ const CAT_COLOR: Record<string, string> = {
 
 const fmt = (n: number) => `${Math.round(n).toLocaleString("ru-RU")} ₽`;
 
-const monthKey = (back: number) => {
+// Якорь периода: на сколько шагов назад от сегодня и в каких единицах.
+const anchorOf = (type: string, back: number) => {
   const d = new Date();
-  d.setUTCDate(1);
-  d.setUTCMonth(d.getUTCMonth() - back);
-  return d.toISOString().slice(0, 7);
+  if (type === "month") {
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() - back);
+    return d.toISOString().slice(0, 7);
+  }
+  d.setUTCDate(d.getUTCDate() - back * (type === "week" ? 7 : 1));
+  return d.toISOString().slice(0, 10);
 };
 
+const PERIODS: [string, string][] = [["day", "день"], ["week", "неделя"], ["month", "месяц"]];
+
 // «сентябрь 2026» — без хвостового «г.», иначе css-capitalize делает «Г.»
-const monthName = (ym: string) =>
-  new Date(ym + "-01T00:00:00")
+const monthName = (label: string) => {
+  if (!/^\d{4}-\d{2}$/.test(label)) return label;
+  return new Date(label + "-01T00:00:00")
     .toLocaleDateString("ru-RU", { month: "long", year: "numeric" })
     .replace(/\s*г\.$/, "");
+};
 
-const monthTitle = (ym: string) => {
-  const s = monthName(ym);
+const monthTitle = (label: string) => {
+  // Месяц приходит как «2026-09», день и неделя — датами. Показываем как есть,
+  // только месяц разворачиваем в слова.
+  if (!/^\d{4}-\d{2}$/.test(label)) return label;
+  const s = monthName(label);
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 
 export default function EconomicsView() {
   const [back, setBack] = useState(0);
+  const [type, setType] = useState("month");
   const [proj, setProj] = useState("");
   const [d, setD] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [sync, setSync] = useState<any[] | null>(null);
 
-  const month = monthKey(back);
+  const month = anchorOf(type, back);
 
   const load = useCallback(() => {
     const q = proj ? `&project=${proj}` : "";
-    fetch(`/api/economics?month=${month}${q}`)
+    fetch(`/api/economics?period=${type}&anchor=${month}${q}`)
       .then((r) => r.json())
       .then(setD)
-      .catch(() => setErr("Не получилось загрузить месяц"));
-  }, [month, proj]);
+      .catch(() => setErr("Не получилось загрузить период"));
+  }, [type, month, proj]);
 
   useEffect(() => {
     setD(null);
@@ -128,13 +141,22 @@ export default function EconomicsView() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {PERIODS.map(([k, label]) => (
+              <button
+                key={k}
+                className={`btn text-xs ${type === k ? "btn-primary" : "btn-secondary"}`}
+                onClick={() => { setType(k); setBack(0); }}
+              >
+                {label}
+              </button>
+            ))}
             <button className="btn btn-secondary text-xs" onClick={() => setBack(back + 1)}>←</button>
             <button className="btn btn-secondary text-xs" disabled={back === 0} onClick={() => setBack(back - 1)}>→</button>
             <FxInput fx={d.fx} busy={busy} onSave={(fx) => send("/api/economics", "POST", { fx })} />
             <button
               className="btn btn-secondary text-xs"
               disabled={busy}
-              title="Спросить у Суперфита и Оракла, что пришло за месяц"
+              title="Спросить источники, что пришло за период"
               onClick={async () => {
                 setBusy(true);
                 setErr("");
@@ -142,7 +164,7 @@ export default function EconomicsView() {
                   const r = await fetch("/api/economics/sync", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ month: d.month }),
+                    body: JSON.stringify({ period: type, anchor: month }),
                   });
                   const j = await r.json();
                   if (!r.ok) setErr(j.error || "Не получилось обновить");
@@ -318,7 +340,7 @@ export default function EconomicsView() {
                 </tr>
               </tbody>
             </table>
-            {d.costs.salaryAccrued !== d.costs.salaryPaid && (
+            {d.periodType === "month" && d.costs.salaryAccrued !== d.costs.salaryPaid && (
               <p className="text-xs text-gray-500 mt-3">
                 За {monthName(d.month)} начислено зарплаты {fmt(d.costs.salaryAccrued)} — в расходы попадает
                 выплаченное, начисление ждёт отметки о выплате на вкладке «Зарплата».

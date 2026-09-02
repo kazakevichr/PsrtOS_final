@@ -1,18 +1,23 @@
 import { prisma } from "@/lib/prisma";
-import { isMonth, monthBounds } from "@/lib/ledger";
+import type { Span } from "@/lib/ledger";
 
-// Поступления из внешних источников: лендинг Суперфита (CloudPayments) и
-// подписки Оракла. Постос ходит за ними сам и складывает в тот же журнал,
-// куда Роман вносит вечеринки, — чтобы доход везде считался одинаково.
+// Поступления из внешних источников. Оба живут на том же сервере, что и
+// Постос, поэтому ходим к ним напрямую — лишнего слоя ручек не заводим.
+//
+//   superfit → CloudPayments, эквайринг лендинга и бота. Ключи сайта в
+//              INCOME_CP_PUBLIC_ID и INCOME_CP_API_SECRET. Сайтов у мерчанта
+//              несколько, у каждого свои ключи — пары перечисляются через
+//              точку с запятой, потому что деньги нужны все.
+//   oracle   → Postgres Оракла, хранилище kv, store «oracle-payments».
+//              Читаем строго на чтение, в самом Оракле ничего не меняем.
 //
 // Почему тянем, а не ждём вебхука: в бухгалтерии пропущенный платёж хуже
-// задержки. Источник переспрашивается за весь месяц целиком, записи узнаются
-// по externalId, поэтому повторный запуск ничего не задваивает и заодно
-// подбирает всё, что потерялось, пока Постос был недоступен.
+// задержки. Период переспрашивается целиком, записи узнаются по externalId —
+// повторный запуск ничего не задваивает и подбирает всё, что потерялось.
 
 export type IncomeItem = {
   externalId: string;
-  date: string;    // ISO
+  date: Date;
   amount: number;
   currency: string;
   title: string;
@@ -26,77 +31,110 @@ export type SyncResult = {
   error?: string;
 };
 
-const SOURCES: Record<string, { label: string; env: string }> = {
-  superfit: { label: "Суперфит24", env: "INCOME_SUPERFIT" },
-  oracle: { label: "Оракл", env: "INCOME_ORACLE" },
+const LABEL: Record<string, string> = {
+  superfit: "CloudPayments",
+  oracle: "Оракл",
 };
 
-export const sourceLabel = (key: string) => SOURCES[key]?.label || key;
-export const sourceKeys = () => Object.keys(SOURCES);
+export const sourceLabel = (key: string) => LABEL[key] || key;
 
-function conf(source: string) {
-  const meta = SOURCES[source];
-  if (!meta) throw new Error(`Источник «${source}» не знаком`);
-  const url = process.env[`${meta.env}_URL`];
-  const key = process.env[`${meta.env}_KEY`];
-  if (!url) throw new Error(`Не задан ${meta.env}_URL в переменных окружения`);
-  if (!key) throw new Error(`Не задан ${meta.env}_KEY в переменных окружения`);
-  return { url: url.replace(/\/$/, ""), key };
+const days = (span: Span) => {
+  const out: string[] = [];
+  const d = new Date(span.start);
+  while (d < span.end) {
+    out.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return out;
+};
+
+/** Пары ключей сайтов CloudPayments: "pk1:secret1;pk2:secret2". */
+function cpKeys() {
+  const raw = `${process.env.INCOME_CP_PUBLIC_ID || ""}:${process.env.INCOME_CP_API_SECRET || ""}`;
+  const many = process.env.INCOME_CP_KEYS || "";
+  const pairs = (many || raw)
+    .split(";")
+    .map((p) => p.trim())
+    .filter((p) => p.includes(":") && p.length > 3);
+  if (!pairs.length) throw new Error("не заданы ключи CloudPayments");
+  return pairs;
 }
 
-/** Оплаченные заказы лендинга за месяц. Ключ — в заголовке, как у бота. */
-async function fromSuperfit(month: string): Promise<IncomeItem[]> {
-  const { url, key } = conf("superfit");
-  const r = await fetch(`${url}/api/orders-report?month=${month}`, {
-    headers: { "x-bot-key": key },
-    cache: "no-store",
-  });
-  if (!r.ok) throw new Error(`Лендинг ответил ${r.status}`);
-  const data = await r.json();
-  return (data.orders || []).map((o: any) => ({
-    externalId: String(o.id),
-    date: o.paidAt,
-    amount: Number(o.amount),
-    currency: o.currency || "RUB",
-    title: o.title || "Покупка на лендинге",
-  }));
+async function fromCloudPayments(span: Span): Promise<IncomeItem[]> {
+  const out: IncomeItem[] = [];
+  for (const pair of cpKeys()) {
+    const auth = Buffer.from(pair).toString("base64");
+    for (const day of days(span)) {
+      const r = await fetch("https://api.cloudpayments.ru/payments/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Basic ${auth}` },
+        body: JSON.stringify({ Date: day }),
+        cache: "no-store",
+      });
+      if (!r.ok) throw new Error(`CloudPayments ответил ${r.status}`);
+      const data = await r.json();
+      if (data.Success === false && data.Message) throw new Error(String(data.Message));
+      for (const t of data.Model || []) {
+        if (t.Status !== "Completed") continue;
+        const at = new Date(t.ConfirmDateIso || t.CreatedDateIso || day);
+        out.push({
+          externalId: String(t.TransactionId),
+          date: at,
+          amount: Number(t.Amount) || 0,
+          currency: t.Currency === "USD" ? "USD" : "RUB",
+          title: t.Description || "Оплата на сайте",
+        });
+      }
+    }
+  }
+  return out;
 }
 
-/** Оплаченные подписки Оракла. Пароль админки идёт в теле, как у admin.js. */
-async function fromOracle(month: string): Promise<IncomeItem[]> {
-  const { url, key } = conf("oracle");
-  const r = await fetch(`${url}/.netlify/functions/payments-report`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ adminPassword: key, month }),
-    cache: "no-store",
-  });
-  if (!r.ok) throw new Error(`Оракл ответил ${r.status}`);
-  const data = await r.json();
-  return (data.payments || []).map((p: any) => ({
-    externalId: String(p.orderId),
-    date: p.paidAt,
-    amount: Number(p.amount),
-    currency: p.currency || "USD",
-    title: p.tier ? `Подписка Оракл, ${p.tier}` : "Подписка Оракл",
-  }));
+async function fromOracle(span: Span): Promise<IncomeItem[]> {
+  const url = process.env.INCOME_ORACLE_DB;
+  if (!url) throw new Error("не задан INCOME_ORACLE_DB");
+  // pg тянем лениво: он нужен только этому источнику.
+  const { Client } = await import("pg");
+  const client = new Client({ connectionString: url });
+  await client.connect();
+  try {
+    const { rows } = await client.query(
+      `select key,
+              (value::json->>'activatedAt')::bigint as at,
+              (value::json->>'amountRub')::numeric  as rub,
+              value::json->>'planLabel'             as plan
+         from kv
+        where store = 'oracle-payments'
+          and value::json->>'status' = 'paid'
+          and (value::json->>'activatedAt')::bigint >= $1
+          and (value::json->>'activatedAt')::bigint <  $2`,
+      [span.start.getTime(), span.end.getTime()]
+    );
+    return rows
+      .filter((r: any) => Number(r.rub) > 0)
+      .map((r: any) => ({
+        externalId: String(r.key).replace(/^payment:/, ""),
+        date: new Date(Number(r.at)),
+        amount: Number(r.rub),
+        currency: "RUB",
+        title: r.plan ? `Оракл · ${r.plan}` : "Подписка Оракл",
+      }));
+  } finally {
+    await client.end();
+  }
 }
 
-const PULL: Record<string, (month: string) => Promise<IncomeItem[]>> = {
-  superfit: fromSuperfit,
+const PULL: Record<string, (span: Span) => Promise<IncomeItem[]>> = {
+  superfit: fromCloudPayments,
   oracle: fromOracle,
 };
 
 /**
- * Тянет поступления за месяц по всем направлениям, у которых указан источник.
- * Возвращает по строке на направление — включая те, где источник ответил
- * ошибкой: молча пропущенный источник в бухгалтерии выглядит как «дохода не
- * было», а это худшая из возможных ошибок здесь.
+ * Тянет поступления за период по направлениям, у которых указан источник.
+ * Источник, который не ответил, возвращается строкой с ошибкой: молча
+ * пропущенный выглядел бы как «продаж не было» — худшая ошибка здесь.
  */
-export async function syncIncome(month: string): Promise<SyncResult[]> {
-  if (!isMonth(month)) throw new Error("Месяц должен быть в виде ГГГГ-ММ");
-  const { start, end } = monthBounds(month);
-
+export async function syncIncome(span: Span): Promise<SyncResult[]> {
   const projects = await prisma.project.findMany({
     where: { incomeSource: { not: null } },
     select: { id: true, name: true, incomeSource: true },
@@ -110,28 +148,22 @@ export async function syncIncome(month: string): Promise<SyncResult[]> {
 
     const pull = PULL[source];
     if (!pull) {
-      row.error = `Источник «${source}» не знаком`;
+      row.error = `источник «${source}» не знаком`;
       continue;
     }
 
     let items: IncomeItem[];
     try {
-      items = await pull(month);
+      items = await pull(span);
     } catch (e: any) {
-      // «fetch failed» из Node ничего не объясняет тому, кто читает отчёт.
       const msg = String(e?.message || "");
       row.error =
-        msg === "fetch failed"
-          ? "не достучались — проверь адрес источника и что он работает"
-          : msg || "источник не ответил";
+        msg === "fetch failed" ? "не достучались до источника" : msg || "источник не ответил";
       continue;
     }
 
     for (const item of items) {
-      const date = new Date(item.date);
-      // Источник отдаёт свой месяц целиком, но подстрахуемся: чужая дата
-      // испортила бы уже закрытую картину соседнего месяца.
-      if (Number.isNaN(date.getTime()) || date < start || date >= end) continue;
+      if (Number.isNaN(item.date.getTime()) || item.date < span.start || item.date >= span.end) continue;
       if (!Number.isFinite(item.amount) || item.amount <= 0) continue;
 
       const existing = await prisma.ledger.findUnique({
@@ -144,11 +176,11 @@ export async function syncIncome(month: string): Promise<SyncResult[]> {
       await prisma.ledger.create({
         data: {
           kind: "in",
-          date,
+          date: item.date,
           category: "продажи",
           title: item.title,
           amount: item.amount,
-          currency: item.currency === "USD" ? "USD" : "RUB",
+          currency: item.currency,
           projectId: project.id,
           source,
           externalId: item.externalId,
