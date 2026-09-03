@@ -15,9 +15,11 @@ import {
 
 export const dynamic = "force-dynamic";
 
+// Кошельки видит только владелец (решение Романа 02.09): это деньги
+// сервисов, а не работа с контентом.
 async function canSee() {
   const s = await getServerSession(authOptions);
-  return s && ["OWNER", "SMM"].includes(s.user.role) ? s : null;
+  return s && s.user.role === "OWNER" ? s : null;
 }
 async function owner() {
   const s = await getServerSession(authOptions);
@@ -109,7 +111,7 @@ export async function POST(req: Request) {
       msgs.push(`${where}✅ <b>${name}</b> снова работает.`);
     }
   }
-  if (msgs.length) void notifyRoles(["SMM", "OWNER"], msgs.join("\n\n"));
+  if (msgs.length) void notifyRoles(["OWNER"], msgs.join("\n\n"));
   return NextResponse.json({ ok: true, pushed: msgs.length });
 }
 

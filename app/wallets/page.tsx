@@ -6,15 +6,16 @@ import WalletsBoard from "@/components/WalletsBoard";
 // Кошельки платных сервисов: остатки, пополнения, что останавливает завод.
 // Раньше жили вкладкой внутри «Контент-завода», но это раздел про деньги,
 // а не про производство — искать его там было неоткуда.
-// Доступ тот же, что был у вкладки: владелец правит, СММ смотрит.
+// Только владелец (решение Романа 02.09): СММ работает с контентом, а не
+// с деньгами сервисов, и остатки на счетах ему знать незачем.
 export default async function WalletsPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
-  if (!["OWNER", "SMM"].includes(session.user.role)) redirect("/payroll");
+  if (session.user.role !== "OWNER") redirect("/");
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold">Кошельки</h1>
-      <WalletsBoard canManage={session.user.role === "OWNER"} />
+      <WalletsBoard canManage />
     </div>
   );
 }
