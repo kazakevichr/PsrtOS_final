@@ -37,7 +37,7 @@ export async function POST(req: Request) {
 
   // Две роли сотрудников: менеджер партнёров и СММ. Владельца через этот
   // роут создать нельзя.
-  const role = body.role === "SMM" ? "SMM" : "MANAGER";
+  const role = ["SMM", "PARTNER", "OWNER"].includes(body.role) ? body.role : "MANAGER";
 
   const user = await prisma.user.create({
     data: {

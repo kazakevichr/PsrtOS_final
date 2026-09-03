@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { currentAccess } from "@/lib/access";
+import ProjectPicker from "@/components/ProjectPicker";
 import SignOutButton from "@/components/SignOutButton";
 import ProjectsNavDropdown from "@/components/ProjectsNavDropdown";
 import SidebarShell from "@/components/SidebarShell";
@@ -10,22 +10,32 @@ const ROLE_LABEL: Record<string, string> = {
   OWNER: "владелец",
   MANAGER: "менеджер партнёров",
   SMM: "СММ",
+  PARTNER: "партнёр",
 };
 
 export default async function Navbar() {
-  const session = await getServerSession(authOptions);
-  if (!session) return null;
-  const role = session.user.role;
-  const isOwner = role === "OWNER";
+  const access = await currentAccess();
+  if (!access) return null;
+  const role = access.role;
+  const isOwner = access.isOwner;
 
-  // СММ не работает с проектами — не дёргаем базу зря.
-  const projects = isOwner || role === "MANAGER"
-    ? await prisma.project.findMany({
-        where: { isActive: true },
-        orderBy: { name: "asc" },
-        select: { id: true, name: true },
-      })
-    : [];
+  // Канбан ходит по проектам, доступным человеку: у владельца это все
+  // активные, у остальных — их направления.
+  const projects =
+    isOwner || ["MANAGER", "PARTNER"].includes(role)
+      ? await prisma.project.findMany({
+          where: {
+            isActive: true,
+            ...(access.projectId
+              ? { id: access.projectId }
+              : isOwner
+                ? {}
+                : { id: { in: access.projects.map((p) => p.id) } }),
+          },
+          orderBy: { name: "asc" },
+          select: { id: true, name: true },
+        })
+      : [];
 
   const linkClass = "px-3 py-2 rounded-lg hover:bg-gray-50 hover:text-brand-700";
 
@@ -72,21 +82,52 @@ export default async function Navbar() {
     navLink("/settings/projects", "Настройка проекта"),
   ];
 
-  // Владелец видит всё; менеджер партнёров — только партнёрский блок и свою
-  // зарплату; СММ — только блок СММ.
+  // Партнёр видит своё направление целиком, но ничего в нём не меняет —
+  // управление командой и настройки остаются у владельца.
+  const partnerViewGroup = [
+    groupTitle("Направление"),
+    navLink("/", "Дашборд"),
+    navLink("/economics", "Бухгалтерия"),
+    navLink("/wallets", "Кошельки"),
+    navLink("/payroll", "Зарплата"),
+  ];
+
+  // Владелец видит всё; партнёр — своё направление; менеджер партнёров —
+  // партнёрский блок и свою зарплату; СММ — блок СММ.
   const items = isOwner
     ? [...partnerGroup, ...smmGroup, ...teamGroup]
-    : role === "SMM"
-      ? smmGroup
-      : [...partnerGroup, navLink("/payroll", "Зарплата")];
+    : role === "PARTNER"
+      ? [
+          ...partnerViewGroup,
+          groupTitle("Партнёрский менеджмент"),
+          navLink("/partners", "Партнёры"),
+          kanbanDropdown,
+          navLink("/tasks", "Задачи"),
+          groupTitle("Контент"),
+          navLink("/social", "Соц.Сети"),
+          navLink("/factory", "Контент-завод"),
+        ]
+      : role === "SMM"
+        ? smmGroup
+        : [...partnerGroup, navLink("/payroll", "Зарплата")];
 
   return (
     <SidebarShell
+      picker={
+        access.projects.length > 0 ? (
+          <ProjectPicker
+            projects={access.projects}
+            projectId={access.projectId}
+            canSeeAll={access.canSeeAll}
+          />
+        ) : null
+      }
       footer={
         <>
           <div>
-            {session.user.name} ({ROLE_LABEL[role] || "сотрудник"})
+            {access.name} ({ROLE_LABEL[role] || "сотрудник"})
           </div>
+          {!access.canEdit && <div className="text-gray-400">режим просмотра</div>}
           <SignOutButton />
         </>
       }

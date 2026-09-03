@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { currentAccess, allowedProjectIds } from "@/lib/access";
 import TaskList from "@/components/TaskList";
 import { ensureAutoTasksForUser } from "@/lib/autoTasks";
 
@@ -18,6 +19,13 @@ export default async function TasksPage() {
 
   const where: any = {};
   if (session.user.role === "MANAGER") where.assignedToUserId = session.user.id;
+
+  // Партнёр видит задачи по партнёрам своего направления. Задачи без
+  // партнёра — внутренняя кухня команды, ему они не показываются.
+  const access = await currentAccess();
+  if (access && access.role === "PARTNER") {
+    where.partner = { projectId: { in: allowedProjectIds(access) } };
+  }
 
   const tasksRaw = await prisma.task.findMany({
     where,

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { currentAccess } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,8 @@ const CATEGORIES = ["реклама", "зарплата", "нейросети", 
 
 export async function POST(req: Request) {
   const s = await getServerSession(authOptions);
-  if (!s || s.user.role !== "OWNER") {
+  const access = await currentAccess();
+  if (!s || !access?.canEdit) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const b = await req.json();
@@ -33,7 +35,9 @@ export async function POST(req: Request) {
       amount,
       currency: b.currency === "USD" ? "USD" : "RUB",
       note: String(b.note || "").trim(),
-      projectId: b.projectId || null,
+      // Направление берём из контекста: запись всегда ложится туда, где
+      // человек сейчас находится.
+      projectId: access.projectId,
       byUserId: s.user.id,
     },
   });

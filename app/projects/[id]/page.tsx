@@ -3,6 +3,7 @@ import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { currentAccess, mayTouchProject } from "@/lib/access";
 import { computeHealth, parseFunnelStages } from "@/lib/economics";
 import KanbanBoard from "@/components/KanbanBoard";
 import AssistantChat from "@/components/AssistantChat";
@@ -11,6 +12,11 @@ import CollapsibleCard from "@/components/CollapsibleCard";
 export default async function ProjectPage({ params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
+
+  // Доступ к направлению проверяем до чтения данных: иначе чужой канбан
+  // открывался бы по прямой ссылке.
+  const access = await currentAccess();
+  if (!access || !mayTouchProject(access, params.id)) notFound();
 
   const project = await prisma.project.findUnique({
     where: { id: params.id },

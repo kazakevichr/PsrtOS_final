@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { currentAccess, allowedProjectIds } from "@/lib/access";
 import { computePayroll, resolvePeriod, PeriodType } from "@/lib/economics";
 import { earnings } from "@/lib/quota";
 import PeriodFilter from "@/components/PeriodFilter";
@@ -16,13 +17,25 @@ export default async function PayrollPage({
   if (!session) redirect("/login");
   if (session.user.role === "SMM") redirect("/social");
 
+  const access = await currentAccess();
   const isOwner = session.user.role === "OWNER";
+  const isPartner = session.user.role === "PARTNER";
   const periodType = (isOwner && (searchParams.period as PeriodType)) || "month";
   const period = resolvePeriod(periodType, searchParams.anchor);
 
   let userIds: string[];
-  if (isOwner) {
-    const managers = await prisma.user.findMany({ where: { role: { in: ["MANAGER", "SMM"] }, isActive: true } });
+  if (isOwner || isPartner) {
+    const managers = await prisma.user.findMany({
+      where: {
+        role: { in: ["MANAGER", "SMM"] },
+        isActive: true,
+        ...(access && !access.isOwner
+          ? { access: { some: { projectId: { in: allowedProjectIds(access) } } } }
+          : access?.projectId
+            ? { access: { some: { projectId: access.projectId } } }
+            : {}),
+      },
+    });
     userIds = managers.map((m) => m.id);
   } else {
     userIds = [session.user.id];
@@ -34,6 +47,7 @@ export default async function PayrollPage({
   // Начисление заводится руками и только помесячно: это то, что уходит в
   // расходы «Бухгалтерии». Посчитанное показываем рядом как подсказку —
   // у СММ она приходит из кабинета, у менеджеров из формулы выше.
+  // Вносить начисления может только владелец — партнёр смотрит.
   const canEnter = isOwner && periodType === "month";
   const records = canEnter
     ? await prisma.payrollRecord.findMany({ where: { month: period.label } })

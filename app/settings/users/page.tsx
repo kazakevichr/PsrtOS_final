@@ -7,13 +7,20 @@ import CreateUserForm from "@/components/CreateUserForm";
 import EmployeeStatusToggle from "@/components/EmployeeStatusToggle";
 import TgAdmin from "@/components/TgAdmin";
 import TgLinkButton from "@/components/TgLinkButton";
+import AccessEditor from "@/components/AccessEditor";
 
 export default async function UsersSettingsPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
   if (session.user.role !== "OWNER") redirect("/");
 
-  const users = await prisma.user.findMany({ orderBy: { createdAt: "asc" } });
+  const [users, projects] = await Promise.all([
+    prisma.user.findMany({
+      orderBy: { createdAt: "asc" },
+      include: { access: { select: { projectId: true, level: true } } },
+    }),
+    prisma.project.findMany({ where: { isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+  ]);
   const period = resolvePeriod("month");
 
   const rows = await Promise.all(
@@ -37,6 +44,7 @@ export default async function UsersSettingsPage() {
               <th className="py-2 pr-4">Имя</th>
               <th className="py-2 pr-4">Email</th>
               <th className="py-2 pr-4">Роль</th>
+              <th className="py-2 pr-4">Направления</th>
               <th className="py-2 pr-4">Оклад</th>
               <th className="py-2 pr-4">Начал работать</th>
               <th className="py-2 pr-4">Активных партнёров</th>
@@ -51,7 +59,22 @@ export default async function UsersSettingsPage() {
               <tr key={u.id} className={`border-b last:border-0 ${!u.isActive ? "opacity-50" : ""}`}>
                 <td className="py-2 pr-4">{u.name}</td>
                 <td className="py-2 pr-4">{u.email}</td>
-                <td className="py-2 pr-4">{u.role === "OWNER" ? "Владелец" : u.role === "SMM" ? "СММ" : "Менеджер партнёров"}</td>
+                <td className="py-2 pr-4">
+                  {u.role === "OWNER"
+                    ? "Владелец"
+                    : u.role === "SMM"
+                      ? "СММ"
+                      : u.role === "PARTNER"
+                        ? "Партнёр"
+                        : "Менеджер партнёров"}
+                </td>
+                <td className="py-2 pr-4">
+                  {u.role === "OWNER" ? (
+                    <span className="text-xs text-gray-400">все — доступы не нужны</span>
+                  ) : (
+                    <AccessEditor userId={u.id} projects={projects} access={u.access} />
+                  )}
+                </td>
                 <td className="py-2 pr-4">{u.fixedSalary.toLocaleString("ru-RU")} ₽</td>
                 <td className="py-2 pr-4">{new Date(u.createdAt).toLocaleDateString("ru-RU")}</td>
                 <td className="py-2 pr-4">{u.activePartners}</td>

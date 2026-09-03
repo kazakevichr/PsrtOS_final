@@ -2,18 +2,23 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { currentAccess } from "@/lib/access";
 import { FX_KEY, allSpan, daysSpan, monthMoney, projectSplit, rangeSpan, Span } from "@/lib/ledger";
 import { resolvePeriod, PeriodType } from "@/lib/economics";
 
 export const dynamic = "force-dynamic";
 
+// Курс — общая настройка на всю группу, менять её может только владелец.
 async function owner() {
   const s = await getServerSession(authOptions);
   return s && s.user.role === "OWNER" ? s : null;
 }
 
 export async function GET(req: Request) {
-  if (!(await owner())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const access = await currentAccess();
+  if (!access || !["OWNER", "PARTNER"].includes(access.role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
   const q = new URL(req.url).searchParams;
   // Окна дашборда — «7 дн», «30 дн», «90 дн»; бухгалтерские — день/неделя/месяц.
   const raw = q.get("period") || "month";
@@ -33,19 +38,19 @@ export async function GET(req: Request) {
         const type = (["day", "week", "month"].includes(raw) ? raw : "month") as PeriodType;
         return { ...resolvePeriod(type, q.get("anchor") || undefined), type };
       })();
-  const project = q.get("project") || undefined;
+  // Направление берём из контекста, а не из адреса: иначе ссылку можно
+  // подправить руками и заглянуть в чужое.
+  const project = access.projectId || undefined;
 
-  const [money, split, projects] = await Promise.all([
+  const [money, split] = await Promise.all([
     monthMoney(span, project),
     // Сводка нужна только на экране «Все направления».
     project ? Promise.resolve(null) : projectSplit(span),
-    prisma.project.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
   ]);
-  return NextResponse.json({ ...money, split, projects });
+  const projectName = project
+    ? access.projects.find((p) => p.id === project)?.name || null
+    : null;
+  return NextResponse.json({ ...money, split, projects: access.projects, projectName });
 }
 
 // Курс доллара: одна настройка на всю бухгалтерию.

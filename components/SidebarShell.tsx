@@ -5,9 +5,11 @@ import { usePathname } from "next/navigation";
 export default function SidebarShell({
   children,
   footer,
+  picker,
 }: {
   children: React.ReactNode;
   footer: React.ReactNode;
+  picker?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
@@ -73,6 +75,7 @@ export default function SidebarShell({
             </svg>
           </button>
         </div>
+        {picker && <div className="pt-3">{picker}</div>}
         <nav className="flex-1 flex flex-col gap-1 px-2 py-3 text-sm text-gray-600 overflow-y-auto">
           {children}
         </nav>

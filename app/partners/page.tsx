@@ -1,8 +1,7 @@
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { currentAccess, allowedProjectIds } from "@/lib/access";
 import { computeHealth } from "@/lib/economics";
 import { bestPartnerLink } from "@/lib/links";
 import ArtifactLink from "@/components/ArtifactLink";
@@ -12,17 +11,22 @@ export default async function AllPartnersPage({
 }: {
   searchParams: { projectId?: string; managerId?: string };
 }) {
-  const session = await getServerSession(authOptions);
-  if (!session) redirect("/login");
-  if (session.user.role !== "OWNER") redirect("/my-partners");
+  const access = await currentAccess();
+  if (!access) redirect("/login");
+  if (!["OWNER", "PARTNER"].includes(access.role)) redirect("/my-partners");
 
+  const allowed = allowedProjectIds(access);
   const [projects, managers] = await Promise.all([
-    prisma.project.findMany({ orderBy: { name: "asc" } }),
+    prisma.project.findMany({ where: { id: { in: allowed } }, orderBy: { name: "asc" } }),
     prisma.user.findMany({ where: { role: "MANAGER" }, orderBy: { name: "asc" } }),
   ]);
 
-  const where: any = {};
-  if (searchParams.projectId) where.projectId = searchParams.projectId;
+  // Рамки направления жёстче фильтра в адресе: чужой projectId в ссылке
+  // не должен открывать чужих партнёров.
+  const where: any = { projectId: { in: allowed } };
+  if (searchParams.projectId && allowed.includes(searchParams.projectId)) {
+    where.projectId = searchParams.projectId;
+  }
   if (searchParams.managerId) where.responsibleUserId = searchParams.managerId;
 
   const partners = await prisma.partner.findMany({

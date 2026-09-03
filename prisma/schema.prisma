@@ -12,7 +12,7 @@ model User {
   name         String
   email        String   @unique
   passwordHash String
-  role         String   @default("MANAGER")
+  role         String   @default("MANAGER") // OWNER | MANAGER | SMM | PARTNER
   fixedSalary  Float    @default(15000)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -23,6 +23,7 @@ model User {
   tgUsername String?
   tgLinkCode String? @unique
 
+  access       ProjectAccess[]
   partners     Partner[]       @relation("ResponsibleUser")
   tasks        Task[]          @relation("AssignedUser")
   transactions Transaction[]   @relation("CreatedByUser")
@@ -65,6 +66,28 @@ model Project {
   ledger    Ledger[]
   recurring RecurringCost[]
   payrolls  PayrollRecord[]
+  access    ProjectAccess[]
+}
+
+// Кто на каких направлениях работает. Роль отвечает на вопрос «что человек
+// делает», эта таблица — «где». Две оси вместо одной: иначе на каждое новое
+// направление пришлось бы заводить новые роли.
+//
+// ПУСТОЙ СПИСОК У ВЛАДЕЛЬЦА ОЗНАЧАЕТ «ВСЕ». Это единственное исключение, и
+// оно намеренное: владельцу не нужно раздавать себе доступы вручную и потом
+// вспоминать про них, заводя новый проект.
+model ProjectAccess {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  level     String   @default("work") // view | work | manage
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+  @@index([userId])
 }
 
 model PartnerType {

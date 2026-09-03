@@ -1,7 +1,6 @@
-import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { currentAccess, allowedProjectIds } from "@/lib/access";
 import { computePayroll, isPartnerActive } from "@/lib/economics";
 import Link from "next/link";
 
@@ -10,16 +9,14 @@ function currentMonth() {
 }
 
 export default async function DashboardPage() {
-  const session = await getServerSession(authOptions);
-  if (!session) redirect("/login");
-  // Дашборд с общими цифрами компании — только для владельца.
-  // У менеджера свои результаты по проектам показаны наверху страницы "Зарплата",
-  // СММ живёт в своём блоке — Соц.Сети.
-  if (session.user.role === "SMM") redirect("/social");
-  if (session.user.role !== "OWNER") redirect("/payroll");
+  const access = await currentAccess();
+  if (!access) redirect("/login");
+  // Сводка по направлениям. Менеджер живёт на «Зарплате», СММ — в Соц.Сетях.
+  if (access.role === "SMM") redirect("/social");
+  if (access.role === "MANAGER") redirect("/payroll");
 
   const projects = await prisma.project.findMany({
-    where: { isActive: true },
+    where: { isActive: true, id: { in: allowedProjectIds(access) } },
     include: { partners: { include: { transactions: true } } },
     orderBy: { createdAt: "asc" },
   });
@@ -27,8 +24,17 @@ export default async function DashboardPage() {
   const month = currentMonth();
   const [start, end] = [new Date(month + "-01T00:00:00Z"), new Date()];
 
+  // Сотрудники направления: у владельца в сводном режиме — вся команда.
   const managers = await prisma.user.findMany({
-    where: { role: { in: ["MANAGER", "SMM"] }, isActive: true },
+    where: {
+      role: { in: ["MANAGER", "SMM"] },
+      isActive: true,
+      ...(access.projectId
+        ? { access: { some: { projectId: access.projectId } } }
+        : access.isOwner
+          ? {}
+          : { access: { some: { projectId: { in: allowedProjectIds(access) } } } }),
+    },
     include: { partners: true },
   });
   const payrolls = await Promise.all(managers.map((m) => computePayroll(m.id, month)));
@@ -62,7 +68,7 @@ export default async function DashboardPage() {
         })}
       </div>
 
-      {session.user.role === "OWNER" && (
+      {managers.length > 0 && (
         <div>
           <h2 className="font-semibold mb-3">Сотрудники</h2>
           <div className="card overflow-x-auto">

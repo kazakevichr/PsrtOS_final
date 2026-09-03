@@ -2,13 +2,14 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { currentAccess } from "@/lib/access";
 import { isMonth } from "@/lib/ledger";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  const s = await getServerSession(authOptions);
-  if (!s || s.user.role !== "OWNER") {
+  const access = await currentAccess();
+  if (!access?.canEdit) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const b = await req.json();
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
       currency: b.currency === "USD" ? "USD" : "RUB",
       fromMonth,
       toMonth: isMonth(b.toMonth) ? b.toMonth : null,
-      projectId: b.projectId || null,
+      projectId: access.projectId,
     },
   });
   return NextResponse.json(cost);
@@ -37,8 +38,8 @@ export async function POST(req: Request) {
 // Платёж не удаляем, а закрываем месяцем — иначе прошлые периоды потеряют
 // расход, который в них действительно был.
 export async function PATCH(req: Request) {
-  const s = await getServerSession(authOptions);
-  if (!s || s.user.role !== "OWNER") {
+  const access = await currentAccess();
+  if (!access?.canEdit) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const b = await req.json();

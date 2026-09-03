@@ -36,21 +36,29 @@ const monthTitle = (label: string) => {
   return s.charAt(0).toUpperCase() + s.slice(1);
 };
 
-export default function EconomicsView() {
+export default function EconomicsView({
+  canEdit = true,
+  projectId = null,
+}: {
+  canEdit?: boolean;
+  projectId?: string | null;
+}) {
   const [range, setRange] = useState<Range>(() => rangeFor("month"));
-  const [proj, setProj] = useState("");
   const [d, setD] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [sync, setSync] = useState<any[] | null>(null);
 
+  // Направление приходит из переключателя в панели — он задаёт контекст
+  // всему приложению, поэтому здесь его выбирать больше негде.
   const load = useCallback(() => {
-    const q = proj ? `&project=${proj}` : "";
-    fetch(`/api/economics?from=${range.from}&to=${range.to}${q}`)
+    fetch(`/api/economics?from=${range.from}&to=${range.to}`)
       .then((r) => r.json())
       .then(setD)
       .catch(() => setErr("Не получилось загрузить период"));
-  }, [range.from, range.to, proj]);
+    // projectId в зависимостях: направление переключается в панели, и без
+    // него экран остался бы с цифрами прошлого направления.
+  }, [range.from, range.to, projectId]);
 
   useEffect(() => {
     setD(null);
@@ -82,8 +90,6 @@ export default function EconomicsView() {
 
   const costs = d.costs.rows.filter((r: any) => r.amount > 0);
   const total = d.costs.total || 1;
-  const projects: any[] = d.projects || [];
-  const current = projects.find((p) => p.id === proj);
 
   return (
     <div className="space-y-4">
@@ -125,13 +131,15 @@ export default function EconomicsView() {
             <h1 className="text-xl font-bold">Бухгалтерия</h1>
             <p className="text-sm text-gray-500">
               {monthTitle(d.month)} · курс {d.fx.toLocaleString("ru-RU")} ₽/$
-              {current ? ` · ${current.name}` : ""}
+              {d.projectName ? ` · ${d.projectName}` : ""}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <PeriodPicker value={range} onChange={setRange} />
-            <FxInput fx={d.fx} busy={busy} onSave={(fx) => send("/api/economics", "POST", { fx })} />
-            <button
+            {canEdit && (
+              <FxInput fx={d.fx} busy={busy} onSave={(fx) => send("/api/economics", "POST", { fx })} />
+            )}
+            {canEdit && <button
               className="btn btn-secondary text-xs"
               disabled={busy}
               title="Спросить источники, что пришло за период"
@@ -156,20 +164,9 @@ export default function EconomicsView() {
               }}
             >
               {busy ? "…" : "Обновить поступления"}
-            </button>
+            </button>}
           </div>
         </div>
-
-        {projects.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-4">
-            <Tab on={!proj} onClick={() => setProj("")}>Все направления</Tab>
-            {projects.map((p) => (
-              <Tab key={p.id} on={proj === p.id} onClick={() => setProj(p.id)}>
-                {p.name}
-              </Tab>
-            ))}
-          </div>
-        )}
 
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-5">
           <Kpi label="Оборот" value={fmt(d.income.turnover)} hint={`партнёрам ушло ${fmt(d.income.partnerShare)}`} />
@@ -205,7 +202,7 @@ export default function EconomicsView() {
       {d.series?.length > 1 && <Chart series={d.series} />}
 
       {/* Сводка по направлениям */}
-      {!proj && d.split && d.split.rows.length > 0 && (
+      {d.split && d.split.rows.length > 0 && (
         <div className="card">
           <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
             <h2 className="font-semibold">По направлениям</h2>
@@ -227,9 +224,7 @@ export default function EconomicsView() {
               {d.split.rows.map((r: any) => (
                 <tr key={r.id} className="border-t border-gray-100">
                   <td className="py-2">
-                    <button className="text-brand-700 hover:underline" onClick={() => setProj(r.id)}>
-                      {r.name}
-                    </button>
+                    {r.name}
                   </td>
                   <td className="py-2 text-right tabular-nums">{fmt(r.income)}</td>
                   <td className="py-2 text-right tabular-nums text-gray-500">{fmt(r.direct)}</td>
@@ -371,8 +366,8 @@ export default function EconomicsView() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Recurring rows={d.recurring} month={d.month} busy={busy} send={send} projects={projects} proj={proj} />
-        <Journal rows={d.ledger} month={d.month} busy={busy} send={send} projects={projects} proj={proj} />
+        <Recurring rows={d.recurring} month={d.month} busy={busy} send={send} canEdit={canEdit} />
+        <Journal rows={d.ledger} month={d.month} busy={busy} send={send} canEdit={canEdit} />
       </div>
     </div>
   );
@@ -496,18 +491,20 @@ function FxInput({ fx, busy, onSave }: { fx: number; busy: boolean; onSave: (fx:
   );
 }
 
-function Recurring({ rows, month, busy, send, projects, proj }: any) {
+function Recurring({ rows, month, busy, send, canEdit }: any) {
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState({ title: "", amount: "", currency: "RUB", projectId: proj || "" });
+  const [f, setF] = useState({ title: "", amount: "", currency: "RUB" });
   const sum = rows.reduce((s: number, r: any) => s + (r.currency === "USD" ? 0 : r.amount), 0);
 
   return (
     <div className="card">
       <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
         <h2 className="font-semibold">Постоянные расходы</h2>
-        <button className="btn btn-secondary text-xs" onClick={() => setOpen(!open)}>
-          {open ? "свернуть" : "добавить"}
-        </button>
+        {canEdit && (
+          <button className="btn btn-secondary text-xs" onClick={() => setOpen(!open)}>
+            {open ? "свернуть" : "добавить"}
+          </button>
+        )}
       </div>
 
       {rows.length === 0 ? (
@@ -524,16 +521,18 @@ function Recurring({ rows, month, busy, send, projects, proj }: any) {
                 <td className="py-2 text-right tabular-nums whitespace-nowrap">
                   {r.currency === "USD" ? `$${r.amount}` : fmt(r.amount)}
                 </td>
-                <td className="py-2 pl-3 text-right">
-                  <button
-                    className="text-xs text-gray-400 hover:text-red-600"
-                    disabled={busy}
-                    onClick={() => send("/api/economics/recurring", "PATCH", { id: r.id, toMonth: month })}
-                    title="Больше не платим — закрыть этим месяцем"
-                  >
-                    закрыть
-                  </button>
-                </td>
+                {canEdit && (
+                  <td className="py-2 pl-3 text-right">
+                    <button
+                      className="text-xs text-gray-400 hover:text-red-600"
+                      disabled={busy}
+                      onClick={() => send("/api/economics/recurring", "PATCH", { id: r.id, toMonth: month })}
+                      title="Больше не платим — закрыть этим месяцем"
+                    >
+                      закрыть
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             <tr className="border-t border-gray-300 font-semibold">
@@ -545,7 +544,7 @@ function Recurring({ rows, month, busy, send, projects, proj }: any) {
         </table>
       )}
 
-      {open && (
+      {open && canEdit && (
         <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-dashed">
           <input
             className="input flex-1 min-w-[140px]"
@@ -567,16 +566,6 @@ function Recurring({ rows, month, busy, send, projects, proj }: any) {
             <option value="RUB">₽</option>
             <option value="USD">$</option>
           </select>
-          <select
-            className="input w-32"
-            value={f.projectId}
-            onChange={(e) => setF({ ...f, projectId: e.target.value })}
-          >
-            <option value="">общий</option>
-            {projects.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
           <button
             className="btn btn-primary"
             disabled={busy}
@@ -586,7 +575,7 @@ function Recurring({ rows, month, busy, send, projects, proj }: any) {
                 amount: Number(f.amount.replace(",", ".")),
                 fromMonth: month,
               });
-              if (ok) setF({ title: "", amount: "", currency: "RUB", projectId: proj || "" });
+              if (ok) setF({ title: "", amount: "", currency: "RUB" });
             }}
           >
             Добавить
@@ -597,7 +586,7 @@ function Recurring({ rows, month, busy, send, projects, proj }: any) {
   );
 }
 
-function Journal({ rows, month, busy, send, projects, proj }: any) {
+function Journal({ rows, month, busy, send, canEdit }: any) {
   const today = new Date().toISOString().slice(0, 10);
   const inMonth = month === today.slice(0, 7);
   const [f, setF] = useState({
@@ -607,7 +596,6 @@ function Journal({ rows, month, busy, send, projects, proj }: any) {
     amount: "",
     currency: "RUB",
     date: inMonth ? today : `${month}-01`,
-    projectId: proj || "",
   });
 
   return (
@@ -657,6 +645,7 @@ function Journal({ rows, month, busy, send, projects, proj }: any) {
         </table>
       )}
 
+      {canEdit && (
       <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-dashed">
         <select className="input w-24" value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
           <option value="out">Трата</option>
@@ -696,16 +685,6 @@ function Journal({ rows, month, busy, send, projects, proj }: any) {
           <option value="RUB">₽</option>
           <option value="USD">$</option>
         </select>
-        <select
-          className="input w-32"
-          value={f.projectId}
-          onChange={(e) => setF({ ...f, projectId: e.target.value })}
-        >
-          <option value="">общий</option>
-          {projects.map((p: any) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
         <button
           className="btn btn-primary"
           disabled={busy}
@@ -720,6 +699,7 @@ function Journal({ rows, month, busy, send, projects, proj }: any) {
           Записать
         </button>
       </div>
+      )}
     </div>
   );
 }
