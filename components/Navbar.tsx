@@ -60,6 +60,7 @@ export default async function Navbar() {
     navLink("/analytics", "Нейро-аналитика"),
     navLink("/factory", "Контент-завод"),
     navLink("/cabinet", "Кабинет СММ"),
+    ...(isOwner ? [] : [navLink("/wallets", "Кошельки")]),
   ];
 
   const teamGroup = [
@@ -68,6 +69,7 @@ export default async function Navbar() {
     navLink("/settings/users", "Сотрудники"),
     navLink("/payroll", "Зарплата"),
     navLink("/economics", "Бухгалтерия"),
+    navLink("/wallets", "Кошельки"),
     navLink("/settings/projects", "Настройка проекта"),
   ];
 
