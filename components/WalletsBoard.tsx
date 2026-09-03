@@ -1,12 +1,16 @@
 "use client";
 
-// Кошельки платных сервисов завода: где кончились деньги, сколько осталось,
+// Кошельки платных сервисов: где кончились деньги, сколько осталось,
 // когда пополняли и куда идти пополнять.
 //
-// Половину строки присылает завод раз в час, половину вносит человек — те
-// сервисы, что остаток по API не отдают (роутер, OpenAI, fal), иначе знать
-// его неоткуда. Поэтому ручной ввод здесь не «дополнительная возможность», а
-// единственный источник половины цифр.
+// Половину строки присылает источник замеров раз в час, половину вносит
+// человек — те сервисы, что остаток по API не отдают (роутер, OpenAI, fal,
+// BetsAPI, TalorData), иначе знать его неоткуда. Поэтому ручной ввод здесь не
+// «дополнительная возможность», а единственный источник половины цифр.
+//
+// Проектов два — завод СуперФита и Оракл, — и переключатель наверху меняет
+// выборку целиком: сервисы, история пополнений и тексты предупреждений
+// приходят с сервера уже для выбранного проекта.
 import { useEffect, useState } from "react";
 
 type Row = {
@@ -20,6 +24,10 @@ type Topup = {
   id: number; service: string; title: string; amount: number;
   at: string; who: string; note: string;
 };
+type Labels = {
+  title: string; blockedTitle: string; blockedNote: string;
+  dryTitle: string; dryNote: string;
+};
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 const when = (iso: string | null) =>
@@ -29,13 +37,16 @@ function badge(r: Row) {
   if (!r.at) return { text: "нет данных", cls: "bg-gray-100 text-gray-600" };
   if (!r.fresh) return { text: "замер устарел", cls: "bg-yellow-100 text-yellow-800" };
   if (!r.ok) return r.blocks
-    ? { text: "пусто — производство стоит", cls: "bg-red-100 text-red-800" }
+    ? { text: "пусто — всё встало", cls: "bg-red-100 text-red-800" }
     : { text: "пусто — работает замена", cls: "bg-orange-100 text-orange-800" };
   if (r.low) return { text: "на исходе", cls: "bg-yellow-100 text-yellow-800" };
   return { text: "работает", cls: "bg-green-100 text-green-800" };
 }
 
 export default function WalletsBoard({ canManage = true }: { canManage?: boolean }) {
+  const [project, setProject] = useState("superfit");
+  const [projects, setProjects] = useState<{ id: string; title: string }[]>([]);
+  const [labels, setLabels] = useState<Labels | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [history, setHistory] = useState<Topup[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -46,16 +57,24 @@ export default function WalletsBoard({ canManage = true }: { canManage?: boolean
   const [comment, setComment] = useState("");
   const [manual, setManual] = useState("");
 
-  async function load() {
-    const r = await fetch("/api/factory/wallets");
-    if (r.ok) {
-      const j = await r.json();
-      setRows(j.wallets || []);
-      setHistory(j.topups || []);
-    }
+  // Ответ на любой запрос — целиком картина одного проекта, поэтому раскладка
+  // одна на загрузку, пополнение и удаление.
+  function apply(j: any) {
+    if (!j?.wallets) return false;
+    setRows(j.wallets);
+    setHistory(j.topups || []);
+    if (j.projects) setProjects(j.projects);
+    if (j.labels) setLabels(j.labels);
+    if (j.project) setProject(j.project);
+    return true;
+  }
+
+  async function load(p: string) {
+    const r = await fetch(`/api/factory/wallets?project=${encodeURIComponent(p)}`);
+    if (r.ok) apply(await r.json());
     setLoaded(true);
   }
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(project); }, [project]);
 
   async function send(body: any, tag: string) {
     if (!canManage) return;
@@ -65,7 +84,7 @@ export default function WalletsBoard({ canManage = true }: { canManage?: boolean
       body: JSON.stringify(body),
     });
     const j = await r.json();
-    if (j.wallets) { setRows(j.wallets); setHistory(j.topups || []); setOpen(""); setAmount(""); setComment(""); setManual(""); }
+    if (apply(j)) { setOpen(""); setAmount(""); setComment(""); setManual(""); }
     else setNote(j.error || "не получилось");
     setBusy("");
   }
@@ -73,9 +92,8 @@ export default function WalletsBoard({ canManage = true }: { canManage?: boolean
   async function removeTopup(id: number) {
     if (!canManage) return;
     setBusy(`del${id}`);
-    const r = await fetch(`/api/factory/wallets?id=${id}`, { method: "DELETE" });
-    const j = await r.json();
-    if (j.wallets) { setRows(j.wallets); setHistory(j.topups || []); }
+    const r = await fetch(`/api/factory/wallets?id=${id}&project=${encodeURIComponent(project)}`, { method: "DELETE" });
+    apply(await r.json());
     setBusy("");
   }
 
@@ -86,16 +104,34 @@ export default function WalletsBoard({ canManage = true }: { canManage?: boolean
 
   return (
     <div className="space-y-4">
-      {stopped.length > 0 && (
-        <div className="card border-red-300 bg-red-50 text-sm">
-          <b>Производство приостановлено.</b> Кончились деньги: {stopped.map((r) => r.title).join(", ")}.
-          Заказы ждут пополнения и поднимутся сами, как только оно придёт.
+      {projects.length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {projects.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => { setProject(p.id); setOpen(""); }}
+              className={`px-3 py-1.5 rounded-lg text-sm border ${
+                p.id === project
+                  ? "bg-brand-600 text-white border-brand-600"
+                  : "hover:bg-gray-50"
+              }`}
+            >
+              {p.title}
+            </button>
+          ))}
         </div>
       )}
-      {stopped.length === 0 && dry.length > 0 && (
+
+      {stopped.length > 0 && labels && (
+        <div className="card border-red-300 bg-red-50 text-sm">
+          <b>{labels.blockedTitle}</b> Кончились деньги: {stopped.map((r) => r.title).join(", ")}.
+          {" "}{labels.blockedNote}
+        </div>
+      )}
+      {stopped.length === 0 && dry.length > 0 && labels && (
         <div className="card border-orange-300 bg-orange-50 text-sm">
-          <b>Контент выходит на замене.</b> Пусто: {dry.map((r) => r.title).join(", ")}.
-          Завод платит другому исполнителю, производство не остановлено — но замена дороже, стоит пополнить.
+          <b>{labels.dryTitle}</b> Пусто: {dry.map((r) => r.title).join(", ")}.
+          {" "}{labels.dryNote}
         </div>
       )}
 
@@ -158,7 +194,8 @@ export default function WalletsBoard({ canManage = true }: { canManage?: boolean
       </div>
 
       {open && canManage && (() => {
-        const r = rows.find((x) => x.service === open)!;
+        const r = rows.find((x) => x.service === open);
+        if (!r) return null;
         return (
           <div className="card space-y-3">
             <div className="font-medium">{r.title}</div>

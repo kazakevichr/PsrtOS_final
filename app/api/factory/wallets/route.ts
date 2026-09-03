@@ -3,7 +3,15 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { notifyRoles } from "@/lib/telegram";
-import { SERVICES, stateOf, topups, wallets } from "@/lib/wallets";
+import {
+  DEFAULT_PROJECT,
+  PROJECTS,
+  SERVICES,
+  projectOf,
+  stateOf,
+  topups,
+  wallets,
+} from "@/lib/wallets";
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +30,34 @@ function byKey(req: Request) {
 
 const money = (n: number) => `$${n.toFixed(2)}`;
 
-// Завод присылает замеры раз в час: {wallets: [{service, ok, low, left, spent,
-// note, link, title}]}. Пуш в Телеграм уходит ТОЛЬКО на смену состояния —
-// иначе за неделю простоя раздел превратится в спам и настоящее
-// предупреждение потеряется среди одинаковых.
+// Проект, который спрашивают. Неизвестное имя не ошибка, а старая ссылка или
+// клиент прежней версии — отдаём проект по умолчанию, а не пустую страницу.
+function askedProject(req: Request) {
+  const p = new URL(req.url).searchParams.get("project") || "";
+  return PROJECTS[p] ? p : DEFAULT_PROJECT;
+}
+
+// Тексты предупреждений и список проектов едут вместе с данными: справочник
+// живёт в lib/wallets.ts рядом с prisma, а таблица — клиентский компонент, и
+// импортировать одно в другое нельзя.
+async function picture(project: string) {
+  return {
+    project,
+    projects: Object.entries(PROJECTS).map(([id, p]) => ({ id, title: p.title })),
+    labels: PROJECTS[project],
+    wallets: await wallets(project),
+    topups: await topups(project),
+  };
+}
+
+// Источники замеров присылают раз в час: {wallets: [{service, ok, low, left,
+// spent, note, link, title}]}. Имя сервиса несёт в себе проект (`router` —
+// СуперФит, `oracle_router` — Оракл), поэтому отдельного поля проекта в теле
+// нет: незнакомое имя молча отбрасывается, как и раньше.
+//
+// Пуш в Телеграм уходит ТОЛЬКО на смену состояния — иначе за неделю простоя
+// раздел превратится в спам и настоящее предупреждение потеряется среди
+// одинаковых.
 export async function POST(req: Request) {
   if (!byKey(req)) return new NextResponse("forbidden", { status: 403 });
   const b = await req.json().catch(() => null);
@@ -58,33 +90,36 @@ export async function POST(req: Request) {
     if (prev?.state === next) continue;      // ничего не изменилось — молчим
 
     const name = fields.title;
+    const proj = PROJECTS[meta.project] || PROJECTS[DEFAULT_PROJECT];
+    const where = `[${proj.title}] `;
     if (next === "down") {
       msgs.push(
-        (meta.blocks
-          ? `⛔️ <b>${name}</b>: ${fields.note || "деньги кончились"}\nПроизводство приостановлено.`
-          : `⚠️ <b>${name}</b>: ${fields.note || "деньги кончились"}\nКонтент продолжает выходить на замене.`) +
+        where +
+          (meta.blocks
+            ? `⛔️ <b>${name}</b>: ${fields.note || "деньги кончились"}\n${proj.blockedTitle}`
+            : `⚠️ <b>${name}</b>: ${fields.note || "деньги кончились"}\n${proj.dryTitle}`) +
           `\nПополнить: ${fields.link}`,
       );
     } else if (next === "low" && prev?.state !== "down") {
       msgs.push(
-        `⚠️ <b>${name}</b>: остаток ${fields.left ?? "?"} ${meta.unit}, скоро кончится.` +
+        `${where}⚠️ <b>${name}</b>: остаток ${fields.left ?? "?"} ${meta.unit}, скоро кончится.` +
           `\nПополнить: ${fields.link}`,
       );
     } else if (next === "ok" && prev && prev.state !== "ok") {
-      msgs.push(`✅ <b>${name}</b> снова работает — запускаю отложенное.`);
+      msgs.push(`${where}✅ <b>${name}</b> снова работает.`);
     }
   }
   if (msgs.length) void notifyRoles(["SMM", "OWNER"], msgs.join("\n\n"));
   return NextResponse.json({ ok: true, pushed: msgs.length });
 }
 
-// Картина для раздела. Заводу по ключу отдаём то же самое: по этим данным он
-// решает, начинать ли производство.
+// Картина для раздела. Источникам замеров по ключу отдаём то же самое: по этим
+// данным завод решает, начинать ли производство.
 export async function GET(req: Request) {
   if (!byKey(req) && !(await canSee())) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-  return NextResponse.json({ wallets: await wallets(), topups: await topups() });
+  return NextResponse.json(await picture(askedProject(req)));
 }
 
 // Ручной ввод — то, чего сервисы не отдают по API.
@@ -99,6 +134,7 @@ export async function PUT(req: Request) {
   if (!SERVICES[service]) {
     return NextResponse.json({ error: "неизвестный сервис" }, { status: 400 });
   }
+  const project = projectOf(service);
 
   if (b?.amount != null) {
     const amount = Number(b.amount);
@@ -123,8 +159,11 @@ export async function PUT(req: Request) {
       create: { service, title: SERVICES[service].title, unit: SERVICES[service].unit },
       update: { manual: null, manualAt: null },
     });
-    void notifyRoles(["OWNER"], `💳 <b>${SERVICES[service].title}</b>: пополнение ${money(amount)}`);
-    return NextResponse.json({ ok: true, wallets: await wallets(), topups: await topups() });
+    void notifyRoles(
+      ["OWNER"],
+      `💳 [${PROJECTS[project].title}] <b>${SERVICES[service].title}</b>: пополнение ${money(amount)}`,
+    );
+    return NextResponse.json({ ok: true, ...(await picture(project)) });
   }
 
   if ("manual" in (b || {})) {
@@ -140,7 +179,7 @@ export async function PUT(req: Request) {
       },
       update: { manual, manualAt: manual == null ? null : new Date() },
     });
-    return NextResponse.json({ ok: true, wallets: await wallets(), topups: await topups() });
+    return NextResponse.json({ ok: true, ...(await picture(project)) });
   }
 
   return NextResponse.json({ error: "нужны amount или manual" }, { status: 400 });
@@ -152,6 +191,10 @@ export async function DELETE(req: Request) {
   if (!(await owner())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const id = Number(new URL(req.url).searchParams.get("id") || 0);
   if (!id) return NextResponse.json({ error: "нужен id" }, { status: 400 });
+  // Проект узнаём ДО удаления: после него сервис уже не спросить, а вернуть
+  // нужно картину того же раздела, из которого нажали «удалить».
+  const row = await prisma.walletTopup.findUnique({ where: { id } });
+  const project = row ? projectOf(row.service) : askedProject(req);
   await prisma.walletTopup.delete({ where: { id } }).catch(() => {});
-  return NextResponse.json({ ok: true, wallets: await wallets(), topups: await topups() });
+  return NextResponse.json({ ok: true, ...(await picture(project)) });
 }

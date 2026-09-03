@@ -1,10 +1,18 @@
 import { prisma } from "@/lib/prisma";
 
-// Кошельки платных сервисов завода: справочник, расчёт остатка и состояние.
+// Кошельки платных сервисов: справочник, расчёт остатка и состояние.
 //
 // Главное правило раздела: таблица показывает ВСЕ сервисы всегда, даже пока
-// завод не прислал ни одного замера. Пустой раздел неотличим от сломанного, а
+// никто не прислал ни одного замера. Пустой раздел неотличим от сломанного, а
 // человек открывает его именно тогда, когда что-то встало.
+//
+// ДВА ПРОЕКТА В ОДНОЙ ТАБЛИЦЕ. Кошельки ведут и завод СуперФита, и Оракл, и
+// «Роутер» есть у обоих. Проект зашит В САМ ИДЕНТИФИКАТОР сервиса
+// (`router` против `oracle_router`), а не вынесен в колонку базы. Так строки
+// двух проектов не могут столкнуться первичным ключом, а схема не меняется
+// вовсе: `Wallet.service` как был единственным ключом, так и остался, и выкат
+// не требует ни миграции, ни простоя. Принадлежность проекту знает
+// справочник ниже — он же единственное место, где её надо править.
 
 export type WalletRow = {
   service: string;
@@ -23,22 +31,54 @@ export type WalletRow = {
   topups: number;          // сумма пополнений, $
   balance: number | null;  // остаток к показу
   source: string;          // откуда взят остаток
-  blocks: boolean;         // останавливает ли производство
+  blocks: boolean;         // останавливает ли работу
   state: string;
 };
 
-// Справочник сервисов. Порядок — как в таблице: сперва то, без чего завод
+// Проекты, у которых есть свои кошельки. Тексты предупреждений разные не для
+// красоты: у завода пустой кошелёк останавливает ПРОИЗВОДСТВО и заказы ждут
+// пополнения, у Оракла — ломает часть продукта у живых подписчиков. Одна
+// формулировка на оба случая врала бы в одном из них.
+export const PROJECTS: Record<
+  string,
+  { title: string; blockedTitle: string; blockedNote: string; dryTitle: string; dryNote: string }
+> = {
+  superfit: {
+    title: "СуперФит",
+    blockedTitle: "Производство приостановлено.",
+    blockedNote:
+      "Заказы ждут пополнения и поднимутся сами, как только оно придёт.",
+    dryTitle: "Контент выходит на замене.",
+    dryNote:
+      "Завод платит другому исполнителю, производство не остановлено — но замена дороже, стоит пополнить.",
+  },
+  oracle: {
+    title: "Оракл",
+    blockedTitle: "Часть продукта не работает у подписчиков.",
+    blockedNote:
+      "Без этих сервисов разбор не собирается вовсе. Люди платят и не получают ответа.",
+    dryTitle: "Продукт работает урезанным.",
+    dryNote:
+      "Разбор выходит, но без части данных — котировок, свежих фактов или озвучки. Качество ниже обещанного.",
+  },
+};
+
+export const DEFAULT_PROJECT = "superfit";
+
+// Справочник сервисов. Порядок — как в таблице: сперва то, без чего проект
 // не работает вовсе.
 //
-// blocks говорит, останавливает ли пустой кошелёк производство. У роутера и
-// OpenAI он false не по недосмотру: это ЗАМЕНА ДРУГ ДРУГУ. Пуст роутер —
+// blocks говорит, останавливает ли пустой кошелёк работу. У роутера и OpenAI
+// СуперФита он false не по недосмотру: это ЗАМЕНА ДРУГ ДРУГУ. Пуст роутер —
 // завод платит OpenAI и продолжает выпускать контент (решение Романа 01.09).
 // Останавливает только то, у чего замены нет.
 export const SERVICES: Record<
   string,
-  { title: string; unit: string; blocks: boolean; link: string; api: string }
+  { project: string; title: string; unit: string; blocks: boolean; link: string; api: string }
 > = {
+  // ── СуперФит ────────────────────────────────────────────────────────────
   router: {
+    project: "superfit",
     title: "Роутер (router.cheap)",
     unit: "$",
     blocks: false,
@@ -46,6 +86,7 @@ export const SERVICES: Record<
     api: "расход — да, остаток — нет",
   },
   openai: {
+    project: "superfit",
     title: "OpenAI",
     unit: "$",
     blocks: false,
@@ -53,6 +94,7 @@ export const SERVICES: Record<
     api: "остаток не отдаёт",
   },
   eleven: {
+    project: "superfit",
     title: "ElevenLabs (озвучка)",
     unit: "символов",
     blocks: false,
@@ -60,6 +102,7 @@ export const SERVICES: Record<
     api: "отдаст после перевыпуска ключа с правом user_read",
   },
   heygen: {
+    project: "superfit",
     title: "HeyGen (ИИ-аватар)",
     unit: "с видео",
     blocks: true,
@@ -67,16 +110,126 @@ export const SERVICES: Record<
     api: "остаток — да",
   },
   fal: {
+    project: "superfit",
     title: "fal.ai (вырезание фона)",
     unit: "$",
     blocks: false,
     link: "https://fal.ai/dashboard",
     api: "остаток не отдаёт",
   },
+
+  // ── Оракл ───────────────────────────────────────────────────────────────
+  // Сайт OracleAi.Link и контент-завод @CONTENT_ZAVOD_INSHALAG_bot. Роутер у
+  // них ОДИН НА ДВОИХ — один ключ, один счёт, и разделить расход по API
+  // нельзя (total_usage у обоих контейнеров совпадает до копейки). Поэтому
+  // строка роутера здесь одна на весь Оракл, а не две.
+  oracle_router: {
+    project: "oracle",
+    title: "Роутер (router.cheap)",
+    unit: "$",
+    blocks: true,
+    link: "https://router.cheap",
+    api: "расход — да, остаток — нет",
+  },
+  oracle_football: {
+    project: "oracle",
+    title: "API-Football (футбол)",
+    unit: "запросов/сутки",
+    blocks: true,
+    link: "https://dashboard.api-football.com/",
+    api: "остаток — да",
+  },
+  oracle_heygen: {
+    project: "oracle",
+    title: "HeyGen (ИИ-аватар завода)",
+    unit: "с видео",
+    blocks: true,
+    link: "https://app.heygen.com",
+    api: "остаток — да",
+  },
+  oracle_betsapi: {
+    project: "oracle",
+    title: "BetsAPI (теннис, баскетбол, киберспорт)",
+    unit: "запросов",
+    blocks: false,
+    link: "https://betsapi.com/mm/account",
+    api: "остаток не отдаёт",
+  },
+  oracle_odds: {
+    project: "oracle",
+    title: "The Odds API (котировки)",
+    unit: "запросов",
+    blocks: false,
+    link: "https://the-odds-api.com/account/",
+    api: "остаток — да",
+  },
+  // Два разных ключа ElevenLabs, а не один на два места: у сайта и у завода
+  // это РАЗНЫЕ аккаунты (проверено 02.09 — ключ сайта отвечает «Invalid API
+  // key», ключ завода живой, ему лишь не хватает права user_read). Одна строка
+  // на оба означала бы, что сайт и завод по очереди перезаписывают друг другу
+  // состояние, и раздел мигал бы между «работает» и «пусто».
+  oracle_eleven: {
+    project: "oracle",
+    title: "ElevenLabs — озвучка разборов (сайт)",
+    unit: "символов",
+    blocks: false,
+    link: "https://elevenlabs.io/app/settings/billing",
+    api: "отдаст после перевыпуска ключа с правом user_read",
+  },
+  oracle_eleven_zavod: {
+    project: "oracle",
+    title: "ElevenLabs — озвучка роликов (завод)",
+    unit: "символов",
+    blocks: false,
+    link: "https://elevenlabs.io/app/settings/billing",
+    api: "отдаст после перевыпуска ключа с правом user_read",
+  },
+  oracle_talor: {
+    project: "oracle",
+    title: "TalorData (веб-поиск)",
+    unit: "кредитов",
+    blocks: false,
+    link: "https://talordata.net",
+    api: "остаток не отдаёт",
+  },
+  oracle_uploadpost: {
+    project: "oracle",
+    title: "upload-post (публикации)",
+    unit: "публикаций",
+    blocks: false,
+    link: "https://www.upload-post.com",
+    api: "остаток не отдаёт",
+  },
+  oracle_brevo: {
+    project: "oracle",
+    title: "Brevo (письма)",
+    unit: "писем",
+    blocks: false,
+    link: "https://app.brevo.com/",
+    api: "остаток — да",
+  },
+  oracle_sportdb: {
+    project: "oracle",
+    title: "SportDB.dev (топ-события)",
+    unit: "запросов",
+    blocks: false,
+    link: "https://dashboard.sportdb.dev",
+    api: "остаток не отдаёт",
+  },
 };
 
-// Сколько замер считается свежим. Завод присылает раз в час; три часа — это
-// два пропущенных цикла подряд, то есть он молчит не случайно.
+/** Идентификаторы сервисов проекта — в том порядке, в каком идут в таблице. */
+export function servicesOf(project: string): string[] {
+  return Object.keys(SERVICES).filter((id) => SERVICES[id].project === project);
+}
+
+/** Проект сервиса; неизвестный сервис считается проектом по умолчанию. */
+export function projectOf(service: string): string {
+  return SERVICES[service]?.project || DEFAULT_PROJECT;
+}
+
+// Сколько замер считается свежим. Замеры приходят раз в час; три часа — это
+// два пропущенных цикла подряд, то есть источник молчит не случайно.
 const FRESH_MS = 3 * 60 * 60 * 1000;
 
 export function stateOf(w: { ok: boolean; low: boolean }): string {
@@ -84,24 +237,30 @@ export function stateOf(w: { ok: boolean; low: boolean }): string {
   return w.low ? "low" : "ok";
 }
 
-/** Полная картина по кошелькам: замеры завода + ручной ввод + пополнения. */
-export async function wallets(): Promise<WalletRow[]> {
+/** Полная картина по кошелькам проекта: замеры + ручной ввод + пополнения. */
+export async function wallets(project = DEFAULT_PROJECT): Promise<WalletRow[]> {
+  const ids = servicesOf(project);
   const [rows, topups] = await Promise.all([
-    prisma.wallet.findMany(),
-    prisma.walletTopup.groupBy({ by: ["service"], _sum: { amount: true } }),
+    prisma.wallet.findMany({ where: { service: { in: ids } } }),
+    prisma.walletTopup.groupBy({
+      by: ["service"],
+      where: { service: { in: ids } },
+      _sum: { amount: true },
+    }),
   ]);
   const byService = new Map(rows.map((r) => [r.service, r]));
   const topupSum = new Map(topups.map((t) => [t.service, t._sum.amount || 0]));
   const now = Date.now();
 
-  return Object.entries(SERVICES).map(([service, meta]) => {
+  return ids.map((service) => {
+    const meta = SERVICES[service];
     const w = byService.get(service);
     const paid = topupSum.get(service) || 0;
     const at = w?.at ? w.at.toISOString() : null;
     const fresh = Boolean(w?.at && now - w.at.getTime() < FRESH_MS);
 
     // ОТКУДА БЕРЁМ ОСТАТОК — три источника, в порядке доверия:
-    //  1. сервис отдал сам (HeyGen, ElevenLabs с правом user_read);
+    //  1. сервис отдал сам (HeyGen, Brevo, ElevenLabs с правом user_read);
     //  2. человек вписал руками — свежее любых расчётов;
     //  3. считаем: пополнения минус расход (роутер, OpenAI, fal).
     let balance: number | null = null;
@@ -128,7 +287,7 @@ export async function wallets(): Promise<WalletRow[]> {
       left: w?.left ?? null,
       unit: meta.unit,
       spent: w?.spent ?? null,
-      note: w?.note || (w ? "" : "завод ещё не присылал замер"),
+      note: w?.note || (w ? "" : "замер ещё не приходил"),
       link: w?.link || meta.link,
       manual: w?.manual ?? null,
       manualAt: w?.manualAt ? w.manualAt.toISOString() : null,
@@ -143,9 +302,10 @@ export async function wallets(): Promise<WalletRow[]> {
   });
 }
 
-/** История пополнений — новые сверху. */
-export async function topups(limit = 50) {
+/** История пополнений проекта — новые сверху. */
+export async function topups(project = DEFAULT_PROJECT, limit = 50) {
   const rows = await prisma.walletTopup.findMany({
+    where: { service: { in: servicesOf(project) } },
     orderBy: { at: "desc" },
     take: Math.min(limit, 200),
   });
