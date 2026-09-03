@@ -19,7 +19,10 @@ export const PRESETS: [string, string][] = [
   ["custom", "Другое"],
 ];
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+// Дата в тех же сутках, что и на сервере: UTC+7. Иначе ночью по Бангкоку
+// «сегодня» в выпадашке отставало бы на день от того, что считает бухгалтерия.
+const TZ_SHIFT_MS = 7 * 3600 * 1000;
+const iso = (d: Date) => new Date(d.getTime() + TZ_SHIFT_MS).toISOString().slice(0, 10);
 export const today = () => iso(new Date());
 
 /** Диапазон для готового варианта. Обе границы включительно. */
@@ -37,9 +40,7 @@ export function rangeFor(preset: string, current?: Range): Range {
     return { preset, from: current?.from || to, to: current?.to || to };
   }
   const n = Number(preset) || 7;
-  const start = new Date(now);
-  start.setUTCDate(start.getUTCDate() - (n - 1));
-  return { preset, from: iso(start), to };
+  return { preset, from: iso(new Date(now.getTime() - (n - 1) * 864e5)), to };
 }
 
 /** Сколько дней в диапазоне — для подписей «за N дн» и сравнения с прошлым. */

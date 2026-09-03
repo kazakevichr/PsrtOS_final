@@ -17,6 +17,23 @@ import { prisma } from "@/lib/prisma";
 //     партнёрские выплаты в расходы, они посчитаются дважды. Поэтому верх
 //     отчёта — выручка компании, а оборот показывается рядом справочно.
 
+// Сутки считаем по UTC+7 — так живёт и Роман, и платёжные кабинеты. По UTC
+// ночные оплаты уезжали во вчера: платёжка показывала девять за день, а
+// бухгалтерия семь, и расхождение выглядело потерей денег.
+// Тот же сдвиг, что у нормы СММ (Красноярск), — специально один на систему.
+export const TZ_SHIFT_MS = 7 * 3600 * 1000;
+
+/** Полночь местного дня в UTC. */
+export const dayStart = (date: string) =>
+  new Date(Date.parse(`${date}T00:00:00Z`) - TZ_SHIFT_MS);
+
+/** Местная дата момента — ею подписаны и график, и журнал. */
+export const dayOf = (d: Date) =>
+  new Date(d.getTime() + TZ_SHIFT_MS).toISOString().slice(0, 10);
+
+/** Сегодняшняя местная дата. */
+export const localToday = () => dayOf(new Date());
+
 export const FX_KEY = "fx:usd";
 const FX_DEFAULT = 90;
 
@@ -53,34 +70,32 @@ export async function allSpan(): Promise<Span> {
     prisma.ledger.findFirst({ orderBy: { date: "asc" }, select: { date: true } }),
   ]);
   const dates = [tx?.date, led?.date].filter(Boolean) as Date[];
-  const now = new Date();
-  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  const end = new Date(dayStart(localToday()).getTime() + 864e5);
   const earliest = dates.length
     ? new Date(Math.min(...dates.map((d) => d.getTime())))
     : new Date(end.getTime() - 365 * 864e5);
-  const start = new Date(Date.UTC(earliest.getUTCFullYear(), earliest.getUTCMonth(), 1));
-  const d = (x: Date) => x.toISOString().slice(0, 10);
-  return { start, end, type: "all", label: `${d(start)} – ${d(new Date(end.getTime() - 864e5))}` };
+  const start = dayStart(`${dayOf(earliest).slice(0, 7)}-01`);
+  return {
+    start,
+    end,
+    type: "all",
+    label: `${dayOf(start)} – ${dayOf(new Date(end.getTime() - 864e5))}`,
+  };
 }
 
-/** Произвольный диапазон, обе границы включительно. */
+/** Произвольный диапазон, обе границы включительно, по местным суткам. */
 export function rangeSpan(from: string, to: string): Span {
-  const start = new Date(`${from}T00:00:00Z`);
-  const end = new Date(`${to}T00:00:00Z`);
-  end.setUTCDate(end.getUTCDate() + 1);
+  const start = dayStart(from);
+  const end = new Date(dayStart(to).getTime() + 864e5);
   return { start, end, type: "days", label: `${from} – ${to}` };
 }
 
 /** Окно в N последних дней — для дашборда «7 / 30 / 90 дней». */
 export function daysSpan(n: number, back = 0): Span {
-  const today = new Date();
-  const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() + 1));
-  end.setUTCDate(end.getUTCDate() - back * n);
-  const start = new Date(end);
-  start.setUTCDate(start.getUTCDate() - n);
-  const d = (x: Date) => x.toISOString().slice(0, 10);
+  const end = new Date(dayStart(localToday()).getTime() + 864e5 * (1 - back * n));
+  const start = new Date(end.getTime() - n * 864e5);
   const last = new Date(end.getTime() - 864e5);
-  return { start, end, type: "days", label: `${d(start)} – ${d(last)}` };
+  return { start, end, type: "days", label: `${dayOf(start)} – ${dayOf(last)}` };
 }
 
 /** Предыдущее окно такой же длины — с чем сравнивать. */
@@ -92,28 +107,33 @@ export function previousSpan(span: Span): Span {
     const s = new Date(Date.UTC(span.start.getUTCFullYear(), span.start.getUTCMonth() - 1, 1));
     return { start: s, end: span.start, type: "month", label: s.toISOString().slice(0, 7) };
   }
-  const d = (x: Date) => x.toISOString().slice(0, 10);
-  return { start, end, type: span.type, label: `${d(start)} – ${d(new Date(end.getTime() - 864e5))}` };
+  return {
+    start,
+    end,
+    type: span.type,
+    label: `${dayOf(start)} – ${dayOf(new Date(end.getTime() - 864e5))}`,
+  };
 }
 
 /** Доля месяца, которую занимает период: постоянные платежи делим по дням. */
 export function monthShare(span: Span) {
   if (span.type === "month") return 1;
   const days = Math.max(1, Math.round((span.end.getTime() - span.start.getTime()) / 864e5));
-  const inMonth = new Date(Date.UTC(span.start.getUTCFullYear(), span.start.getUTCMonth() + 1, 0)).getUTCDate();
+  const [y, m] = dayOf(span.start).split("-").map(Number);
+  const inMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return days / inMonth;
 }
 
 /** Месяцы, которые задевает период — для таблиц, где ключ это «ГГГГ-ММ». */
 export function monthsOf(span: Span): string[] {
   const out: string[] = [];
-  const d = new Date(Date.UTC(span.start.getUTCFullYear(), span.start.getUTCMonth(), 1));
+  const d = dayStart(`${dayOf(span.start).slice(0, 7)}-01`);
   const last = new Date(span.end.getTime() - 1);
   while (d <= last) {
-    out.push(d.toISOString().slice(0, 7));
+    out.push(dayOf(d).slice(0, 7));
     d.setUTCMonth(d.getUTCMonth() + 1);
   }
-  return out.length ? out : [span.start.toISOString().slice(0, 7)];
+  return out.length ? out : [dayOf(span.start).slice(0, 7)];
 }
 
 /** Приводим запись к рублям: в журнале можно вести и долларовые траты. */
@@ -174,7 +194,7 @@ export async function monthMoney(span: Span, projectId?: string, light = false) 
         ? Promise.resolve([] as { cost: number }[])
         : prisma.factoryJob.findMany({
             where: {
-              date: { gte: start.toISOString().slice(0, 10), lt: end.toISOString().slice(0, 10) },
+              date: { gte: dayOf(start), lt: dayOf(end) },
               cost: { gt: 0 },
             },
             select: { cost: true },
@@ -259,7 +279,7 @@ export async function monthMoney(span: Span, projectId?: string, light = false) 
 
   if (!light) {
     const byDay = new Map<string, { in: number; out: number }>();
-    const day = (d: Date) => d.toISOString().slice(0, 10);
+    const day = dayOf;
     const at = (k: string) => {
       let v = byDay.get(k);
       if (!v) byDay.set(k, (v = { in: 0, out: 0 }));
@@ -343,7 +363,7 @@ export async function monthMoney(span: Span, projectId?: string, light = false) 
     ledger: ledger.map((l) => ({
       id: l.id,
       kind: l.kind,
-      date: l.date.toISOString().slice(0, 10),
+      date: dayOf(l.date),
       category: l.category,
       title: l.title,
       amount: l.amount,
