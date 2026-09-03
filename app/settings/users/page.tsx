@@ -8,18 +8,39 @@ import EmployeeStatusToggle from "@/components/EmployeeStatusToggle";
 import TgAdmin from "@/components/TgAdmin";
 import TgLinkButton from "@/components/TgLinkButton";
 import AccessEditor from "@/components/AccessEditor";
+import { currentAccess } from "@/lib/access";
 
 export default async function UsersSettingsPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
   if (session.user.role !== "OWNER") redirect("/");
 
+  const access = await currentAccess();
+  // В срезе направления показываем тех, кто на нём работает. Владелец в
+  // списке всегда: без него страница выглядит так, будто его уволили.
+  const scope = access?.projectId
+    ? {
+        OR: [
+          { role: "OWNER" },
+          { access: { some: { projectId: access.projectId } } },
+        ],
+      }
+    : {};
+
   const [users, projects] = await Promise.all([
     prisma.user.findMany({
+      where: scope,
       orderBy: { createdAt: "asc" },
       include: { access: { select: { projectId: true, level: true } } },
     }),
-    prisma.project.findMany({ where: { isActive: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    // В срезе направления и доступы правятся только по нему: раздавать
+    // права на чужой проект, глядя на его сотрудников, — верный способ
+    // промахнуться строкой.
+    prisma.project.findMany({
+      where: { isActive: true, ...(access?.projectId ? { id: access.projectId } : {}) },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
   const period = resolvePeriod("month");
 

@@ -52,7 +52,17 @@ function Bars({ title, rows }: { title: string; rows: any[] }) {
   );
 }
 
-export default function NeuroAnalytics({ isOwner }: { isOwner: boolean }) {
+export default function NeuroAnalytics({
+  isOwner,
+  brands,
+  projectName,
+}: {
+  isOwner: boolean;
+  // Бренды выбранного направления: аналитика разбирает те же аккаунты, что
+  // показывают Соц.Сети, значит и рамки у них общие.
+  brands?: string[];
+  projectName?: string;
+}) {
   const [account, setAccount] = useState("all");
   const [days, setDays] = useState(30);
   const [data, setData] = useState<any>(null);
@@ -60,7 +70,8 @@ export default function NeuroAnalytics({ isOwner }: { isOwner: boolean }) {
   const [note, setNote] = useState("");
 
   async function load(acc = account, d = days) {
-    const r = await fetch(`/api/analytics?account=${encodeURIComponent(acc)}&days=${d}`);
+    const scope = brands?.length ? `&brands=${encodeURIComponent(brands.join(","))}` : "";
+    const r = await fetch(`/api/analytics?account=${encodeURIComponent(acc)}&days=${d}${scope}`);
     if (r.ok) setData(await r.json());
   }
   useEffect(() => { load(); }, [account, days]);
@@ -108,7 +119,7 @@ export default function NeuroAnalytics({ isOwner }: { isOwner: boolean }) {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <select value={account} onChange={(e) => setAccount(e.target.value)} className="border rounded-lg px-2 py-1.5 text-sm">
-            <option value="all">Все аккаунты</option>
+            <option value="all">{projectName ? `Все аккаунты · ${projectName}` : "Все аккаунты"}</option>
             {data.accounts.map((a: string) => <option key={a} value={a}>@{a}</option>)}
           </select>
           <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="border rounded-lg px-2 py-1.5 text-sm">

@@ -118,6 +118,31 @@ export function allowedProjectIds(access: Access): string[] {
   return access.projectId ? [access.projectId] : access.projects.map((p) => p.id);
 }
 
+/**
+ * Рамки для задач. Задача принадлежит направлению через партнёра; задача без
+ * партнёра — через того, на кого назначена. Иначе норма СММ по СуперФиту
+ * висела бы в списке Оракла и путала бы обоих.
+ */
+export function taskWhere(access: Access) {
+  if (!access.projectId) {
+    if (access.isOwner) return {};
+    const ids = access.projects.map((p) => p.id);
+    return {
+      OR: [
+        { partner: { projectId: { in: ids } } },
+        { partnerId: null, assignedTo: { access: { some: { projectId: { in: ids } } } } },
+      ],
+    };
+  }
+  const projectId = access.projectId;
+  return {
+    OR: [
+      { partner: { projectId } },
+      { partnerId: null, assignedTo: { access: { some: { projectId } } } },
+    ],
+  };
+}
+
 /** Есть ли у человека доступ к конкретному направлению. */
 export function mayTouchProject(access: Access, projectId: string): boolean {
   return access.isOwner || access.projects.some((p) => p.id === projectId);

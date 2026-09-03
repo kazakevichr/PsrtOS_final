@@ -55,6 +55,13 @@ model Project {
   // Откуда тянуть поступления: superfit (лендинг с CloudPayments) или
   // oracle (подписки Оракла). Пусто — доход вносится руками.
   incomeSource             String?
+  // Бренды соцсетей этого направления: по ним фильтруются Соц.Сети и
+  // нейро-аналитика. Через запятую, имена — из BRAND_MAP.
+  brandKeys                String   @default("")
+  // Есть ли у направления свой контент-завод. Пока он один, у СуперФита:
+  // у остальных разделы завода и кабинета СММ показывают пустое место,
+  // а не чужие нормы.
+  hasFactory               Boolean  @default(false)
   knowledgeBase            String   @default("")
   createdAt                DateTime @default(now())
 

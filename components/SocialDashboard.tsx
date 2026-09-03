@@ -73,8 +73,18 @@ function humanError(e: string): string {
   return e;
 }
 
-export default function SocialDashboard({ canManage = true }: { canManage?: boolean }) {
-  const [all, setAll] = useState<any[]>([]);
+export default function SocialDashboard({
+  canManage = true,
+  brands: only,
+  projectName,
+}: {
+  canManage?: boolean;
+  // Бренды выбранного направления. Заданы — показываем только их и убираем
+  // переключатель проектов: он выбирал бы то, чего человеку видеть нечего.
+  brands?: string[];
+  projectName?: string;
+}) {
+  const [allRaw, setAll] = useState<any[]>([]);
   const [range, setRange] = useState<Range>(() => rangeFor("7"));
   const [platform, setPlatform] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -114,6 +124,12 @@ export default function SocialDashboard({ canManage = true }: { canManage?: bool
     }
   }
 
+  // Аккаунты вне направления не должны попадать даже в подсчёты, поэтому
+  // режем не на показе, а на входе.
+  const all = useMemo(
+    () => (only ? allRaw.filter((a) => only.includes(a.brand)) : allRaw),
+    [allRaw, only]
+  );
   // Оси фильтров строятся от данных: появится новая платформа — появится чип
   const platforms = useMemo(() => [...new Set(all.map((a) => a.platform))], [all]);
   const brands = useMemo(() => [...new Set(all.map((a) => a.brand))], [all]);
@@ -283,8 +299,10 @@ export default function SocialDashboard({ canManage = true }: { canManage?: bool
           <button key={p} className={chip(platform === p)} onClick={() => setPlatform(p)}>{PLATFORM_NAMES[p] || p}</button>
         ))}
         <span className="w-px h-6 bg-gray-200 mx-1" />
-        <button className={chip(brand === "all")} onClick={() => setBrand("all")}>Все проекты</button>
-        {brands.map((b) => (
+        {!only && (
+          <button className={chip(brand === "all")} onClick={() => setBrand("all")}>Все проекты</button>
+        )}
+        {!only && brands.map((b) => (
           <button key={b} className={chip(brand === b)} onClick={() => setBrand(b)}>{BRAND_NAMES[b] || b}</button>
         ))}
         <span className="w-px h-6 bg-gray-200 mx-1" />

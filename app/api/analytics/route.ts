@@ -22,7 +22,7 @@ const median = (xs: number[]) => {
 };
 
 // Посты выбранного среза с паспортом: аккаунт (или все), давность в днях.
-async function buildPosts(account: string, days: number) {
+async function buildPosts(account: string, days: number, brands?: string[]) {
   const factory = new Set<string>();
   for (const j of await prisma.factoryJob.findMany({ select: { links: true } })) {
     for (const l of JSON.parse(j.links) as any[]) if (l?.link) factory.add(normLink(l.link));
@@ -33,6 +33,9 @@ async function buildPosts(account: string, days: number) {
   const accounts: string[] = [];
   for (const a of await prisma.igAccount.findMany({ orderBy: { username: "asc" } })) {
     if (a.igId.startsWith("bd:")) continue;
+    // Рамки направления: чужие аккаунты не должны попадать даже в список
+    // выбора — иначе срез «все аккаунты» посчитает и их.
+    if (brands && !brands.includes(a.brand)) continue;
     accounts.push(a.username);
     if (account !== "all" && a.username !== account) continue;
     for (const m of JSON.parse(a.media) as any[]) {
@@ -63,7 +66,9 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const account = url.searchParams.get("account") || "all";
   const days = Math.min(365, Number(url.searchParams.get("days")) || 30);
-  const { posts, accounts } = await buildPosts(account, days);
+  const brandsRaw = url.searchParams.get("brands") || "";
+  const brands = brandsRaw ? brandsRaw.split(",").map((b) => b.trim()).filter(Boolean) : undefined;
+  const { posts, accounts } = await buildPosts(account, days, brands);
 
   // Срезы по осям паспорта: медианный охват, только посты старше 72 часов.
   const mature = posts.filter(

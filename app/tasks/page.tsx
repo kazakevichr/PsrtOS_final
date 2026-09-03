@@ -2,7 +2,7 @@ import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { currentAccess, allowedProjectIds } from "@/lib/access";
+import { currentAccess, taskWhere } from "@/lib/access";
 import TaskList from "@/components/TaskList";
 import { ensureAutoTasksForUser } from "@/lib/autoTasks";
 
@@ -20,12 +20,11 @@ export default async function TasksPage() {
   const where: any = {};
   if (session.user.role === "MANAGER") where.assignedToUserId = session.user.id;
 
-  // Партнёр видит задачи по партнёрам своего направления. Задачи без
-  // партнёра — внутренняя кухня команды, ему они не показываются.
+  // Рамки направления: задача принадлежит проекту через партнёра, а задача
+  // без партнёра — через того, на кого назначена. Иначе норма СММ по
+  // СуперФиту висела бы в списке Оракла.
   const access = await currentAccess();
-  if (access && access.role === "PARTNER") {
-    where.partner = { projectId: { in: allowedProjectIds(access) } };
-  }
+  if (access) Object.assign(where, taskWhere(access));
 
   const tasksRaw = await prisma.task.findMany({
     where,

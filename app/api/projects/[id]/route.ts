@@ -27,6 +27,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     "knowledgeBase",
     "funnelStages",
     "incomeSource",
+    "brandKeys",
+    "hasFactory",
   ] as const;
 
   const data: Record<string, unknown> = {};

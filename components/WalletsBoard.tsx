@@ -43,8 +43,16 @@ function badge(r: Row) {
   return { text: "работает", cls: "bg-green-100 text-green-800" };
 }
 
-export default function WalletsBoard({ canManage = true }: { canManage?: boolean }) {
-  const [project, setProject] = useState("superfit");
+export default function WalletsBoard({
+  canManage = true,
+  lockTo,
+}: {
+  canManage?: boolean;
+  // Направление выбрано в панели — тогда свой переключатель здесь лишний
+  // и, хуже того, показывал бы чужие сервисы.
+  lockTo?: string;
+}) {
+  const [project, setProject] = useState(lockTo || "superfit");
   const [projects, setProjects] = useState<{ id: string; title: string }[]>([]);
   const [labels, setLabels] = useState<Labels | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
@@ -65,7 +73,7 @@ export default function WalletsBoard({ canManage = true }: { canManage?: boolean
     setHistory(j.topups || []);
     if (j.projects) setProjects(j.projects);
     if (j.labels) setLabels(j.labels);
-    if (j.project) setProject(j.project);
+    if (j.project && !lockTo) setProject(j.project);
     return true;
   }
 
@@ -104,7 +112,7 @@ export default function WalletsBoard({ canManage = true }: { canManage?: boolean
 
   return (
     <div className="space-y-4">
-      {projects.length > 1 && (
+      {!lockTo && projects.length > 1 && (
         <div className="flex flex-wrap gap-2">
           {projects.map((p) => (
             <button

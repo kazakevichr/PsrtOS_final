@@ -8,6 +8,8 @@ type Project = {
   isActive: boolean;
   currency: string;
   incomeSource: string | null;
+  brandKeys: string;
+  hasFactory: boolean;
   partnerCommissionPercent: number;
   ownerProfitPercent: number;
   kpiEnabled: boolean;
@@ -42,6 +44,8 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
         isActive: form.isActive,
         currency: form.currency,
         incomeSource: form.incomeSource || null,
+        brandKeys: form.brandKeys || "",
+        hasFactory: Boolean(form.hasFactory),
         partnerCommissionPercent: Number(form.partnerCommissionPercent),
         ownerProfitPercent: Number(form.ownerProfitPercent),
         kpiEnabled: form.kpiEnabled,
@@ -126,6 +130,37 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
         <label className="flex flex-col gap-1">
           % владельца от остатка
           <input className="input" type="number" value={form.ownerProfitPercent} onChange={(e) => set("ownerProfitPercent", Number(e.target.value) as any)} />
+        </label>
+      </div>
+
+      <Block title="Контент" note="что показывать в Соц.Сетях и на заводе" />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+        <label className="flex flex-col gap-1 sm:col-span-2">
+          Бренды соцсетей
+          <input
+            className="input"
+            placeholder="например: Оракл"
+            value={form.brandKeys || ""}
+            onChange={(e) => set("brandKeys", e.target.value)}
+          />
+          <span className="text-xs text-gray-400">
+            Через запятую, как названы проекты в Соц.Сетях. Пусто — в срезе направления аккаунтов
+            не будет.
+          </span>
+        </label>
+        <label className="flex flex-col gap-1">
+          Свой контент-завод
+          <select
+            className="input"
+            value={form.hasFactory ? "true" : "false"}
+            onChange={(e) => set("hasFactory", (e.target.value === "true") as any)}
+          >
+            <option value="false">нет</option>
+            <option value="true">есть</option>
+          </select>
+          <span className="text-xs text-gray-400">
+            Нет — разделы завода и кабинета СММ покажут пустое место вместо чужих норм.
+          </span>
         </label>
       </div>
 
