@@ -5,13 +5,8 @@
 // обновляет сам сервер каждые 20 минут (instrumentation.ts).
 import { useEffect, useMemo, useState } from "react";
 import PeriodPicker, { Range, rangeDays, rangeFor } from "@/components/PeriodPicker";
+import { BRAND_NAMES } from "@/lib/brands";
 
-const BRAND_NAMES: Record<string, string> = {
-  superfit: "СуперФит",
-  party: "Вечеринки",
-  oracle: "Оракл",
-  other: "Прочее",
-};
 const PLATFORM_NAMES: Record<string, string> = {
   instagram: "📸 Инстаграм",
   youtube: "📺 Ютуб",

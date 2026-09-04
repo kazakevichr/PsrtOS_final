@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { brandLabel } from "@/lib/brands";
 
 type Project = {
   id: string;
@@ -170,7 +171,7 @@ export default function ProjectSettingsForm({
                     )
                   }
                 >
-                  {b}
+                  {brandLabel(b)}
                 </button>
               );
             })}

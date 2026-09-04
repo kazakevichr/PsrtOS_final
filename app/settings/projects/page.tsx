@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import ProjectSettingsForm from "@/components/ProjectSettingsForm";
 import { brandNames } from "@/lib/insta";
+import { ALL_BRAND_KEYS } from "@/lib/brands";
 import Link from "next/link";
 
 export default async function ProjectSettingsPage() {
@@ -14,7 +15,9 @@ export default async function ProjectSettingsPage() {
   // Бренды берём из настроек сбора соцсетей: направление и бренд зовутся
   // по-разному (SUPERFIT24 против СуперФита), и попадать в чужое написание
   // руками — верный способ получить пустой срез и долго искать почему.
-  const brands = brandNames();
+  // Настроенные для сбора плюс известные системе: Оракл читается своими
+  // каналами, а не BRAND_MAP, и без этого его нечем было бы выбрать.
+  const brands = [...new Set([...brandNames(), ...ALL_BRAND_KEYS])];
 
   const projects = await prisma.project.findMany({
     include: { partnerTypes: true },
