@@ -3,12 +3,18 @@ import { redirect } from "next/navigation";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import ProjectSettingsForm from "@/components/ProjectSettingsForm";
+import { brandNames } from "@/lib/insta";
 import Link from "next/link";
 
 export default async function ProjectSettingsPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
   if (session.user.role !== "OWNER") redirect("/");
+
+  // Бренды берём из настроек сбора соцсетей: направление и бренд зовутся
+  // по-разному (SUPERFIT24 против СуперФита), и попадать в чужое написание
+  // руками — верный способ получить пустой срез и долго искать почему.
+  const brands = brandNames();
 
   const projects = await prisma.project.findMany({
     include: { partnerTypes: true },
@@ -23,7 +29,7 @@ export default async function ProjectSettingsPage() {
       </div>
       <div className="space-y-4">
         {projects.map((p) => (
-          <ProjectSettingsForm key={p.id} project={p} />
+          <ProjectSettingsForm key={p.id} project={p} brands={brands} />
         ))}
       </div>
     </div>

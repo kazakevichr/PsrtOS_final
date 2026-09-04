@@ -23,7 +23,16 @@ type Project = {
   partnerTypes: { id: string; name: string; kpiAmount: number }[];
 };
 
-export default function ProjectSettingsForm({ project }: { project: Project }) {
+export default function ProjectSettingsForm({
+  project,
+  brands,
+}: {
+  project: Project;
+  // Бренды соцсетей как они названы в сборе статистики. Выбор из списка, а не
+  // ввод руками: направление и бренд зовутся по-разному, и промахнуться в
+  // написании — значит получить пустой срез без единой подсказки почему.
+  brands: string[];
+}) {
   const router = useRouter();
   const [form, setForm] = useState(project);
   const [busy, setBusy] = useState(false);
@@ -135,19 +144,41 @@ export default function ProjectSettingsForm({ project }: { project: Project }) {
 
       <Block title="Контент" note="что показывать в Соц.Сетях и на заводе" />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-        <label className="flex flex-col gap-1 sm:col-span-2">
+        <div className="flex flex-col gap-1 sm:col-span-2">
           Бренды соцсетей
-          <input
-            className="input"
-            placeholder="например: Оракл"
-            value={form.brandKeys || ""}
-            onChange={(e) => set("brandKeys", e.target.value)}
-          />
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {brands.length === 0 && (
+              <span className="text-xs text-gray-400">
+                Бренды не настроены — сбор статистики соцсетей ещё не подключён.
+              </span>
+            )}
+            {brands.map((b) => {
+              const chosen = (form.brandKeys || "")
+                .split(",")
+                .map((x) => x.trim())
+                .filter(Boolean);
+              const on = chosen.includes(b);
+              return (
+                <button
+                  key={b}
+                  type="button"
+                  className={`btn text-xs ${on ? "btn-primary" : "btn-secondary"}`}
+                  onClick={() =>
+                    set(
+                      "brandKeys",
+                      (on ? chosen.filter((x) => x !== b) : [...chosen, b]).join(",")
+                    )
+                  }
+                >
+                  {b}
+                </button>
+              );
+            })}
+          </div>
           <span className="text-xs text-gray-400">
-            Через запятую, как названы проекты в Соц.Сетях. Пусто — в срезе направления аккаунтов
-            не будет.
+            Ни один не выбран — в срезе направления аккаунтов не будет.
           </span>
-        </label>
+        </div>
         <label className="flex flex-col gap-1">
           Свой контент-завод
           <select
