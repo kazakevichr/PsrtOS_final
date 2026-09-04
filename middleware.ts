@@ -10,21 +10,34 @@ import { withAuth } from "next-auth/middleware";
 const READ_ONLY_ROLES = new Set(["PARTNER"]);
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 
-export default withAuth(function middleware(req) {
-  const role = (req as any).nextauth?.token?.role;
-  if (
-    READ_ONLY_ROLES.has(role) &&
-    !SAFE.has(req.method) &&
-    // Вход и выход из системы — не изменение данных.
-    !req.nextUrl.pathname.startsWith("/api/auth")
-  ) {
-    return NextResponse.json(
-      { error: "Доступ только на просмотр: изменения вносит владелец" },
-      { status: 403 }
-    );
+export default withAuth(
+  function middleware(req) {
+    const role = (req as any).nextauth?.token?.role;
+    if (
+      READ_ONLY_ROLES.has(role) &&
+      !SAFE.has(req.method) &&
+      // Вход и выход из системы — не изменение данных.
+      !req.nextUrl.pathname.startsWith("/api/auth")
+    ) {
+      return NextResponse.json(
+        { error: "Доступ только на просмотр: изменения вносит владелец" },
+        { status: 403 }
+      );
+    }
+    return NextResponse.next();
+  },
+  {
+    callbacks: {
+      // Завод и скрипты ходят по ключу, а не сессией. Без этой оговорки
+      // withAuth отвечал им редиректом на страницу входа: завод читал это как
+      // «Постос недоступен», работал по-старому и производил контент, который
+      // выключен в матрице. Настоящую проверку ключа делает сама ручка —
+      // здесь мы только не мешаем запросу до неё дойти.
+      authorized: ({ req, token }) =>
+        Boolean(token) || Boolean(req.headers.get("x-factory-key")),
+    },
   }
-  return NextResponse.next();
-});
+);
 
 export const config = {
   matcher: [
