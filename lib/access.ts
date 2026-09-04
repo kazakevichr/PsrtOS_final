@@ -34,6 +34,12 @@ export type Access = {
   canEdit: boolean;
   /** Показывать ли переключатель «Все направления». */
   canSeeAll: boolean;
+  /**
+   * Человеку не назначено ни одного направления. Тогда рамки не применяются
+   * вовсе: система доступов с незаполненными данными не должна запирать
+   * команду — так же, как новый признак не должен гасить работающий раздел.
+   */
+  unscoped: boolean;
 };
 
 /** Уровень человека на конкретном направлении. */
@@ -63,8 +69,17 @@ export async function currentAccess(): Promise<Access | null> {
         select: { projectId: true, level: true },
       });
 
+  // Никому ничего не назначено — показываем всё, как до появления доступов.
+  // Партнёра это послабление не касается: роль заведена ради ограничения, и
+  // забытый доступ должен оставить его без данных, а не открыть ему всё.
+  const unscoped =
+    !isOwner && session.user.role !== "PARTNER" && rows.length === 0;
+
   const projects = await prisma.project.findMany({
-    where: isOwner ? { isActive: true } : { isActive: true, id: { in: rows.map((r) => r.projectId) } },
+    where:
+      isOwner || unscoped
+        ? { isActive: true }
+        : { isActive: true, id: { in: rows.map((r) => r.projectId) } },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
@@ -94,6 +109,7 @@ export async function currentAccess(): Promise<Access | null> {
     projectId,
     canEdit: level !== "view",
     canSeeAll,
+    unscoped,
   };
 }
 
@@ -103,7 +119,7 @@ export async function currentAccess(): Promise<Access | null> {
  */
 export function projectWhere(access: Access): { projectId?: string | { in: string[] } } {
   if (access.projectId) return { projectId: access.projectId };
-  if (access.isOwner) return {};
+  if (access.isOwner || access.unscoped) return {};
   return { projectId: { in: access.projects.map((p) => p.id) } };
 }
 
@@ -125,7 +141,7 @@ export function allowedProjectIds(access: Access): string[] {
  */
 export function taskWhere(access: Access) {
   if (!access.projectId) {
-    if (access.isOwner) return {};
+    if (access.isOwner || access.unscoped) return {};
     const ids = access.projects.map((p) => p.id);
     return {
       OR: [
@@ -145,5 +161,5 @@ export function taskWhere(access: Access) {
 
 /** Есть ли у человека доступ к конкретному направлению. */
 export function mayTouchProject(access: Access, projectId: string): boolean {
-  return access.isOwner || access.projects.some((p) => p.id === projectId);
+  return access.isOwner || access.unscoped || access.projects.some((p) => p.id === projectId);
 }
