@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normLink, KIND_ORIGIN } from "@/lib/meta";
+import { factoryAuth } from "@/lib/factory";
 
 export const dynamic = "force-dynamic";
 
-const byKey = (req: Request) =>
-  req.headers.get("x-factory-key") === process.env.IG_HOST_KEY;
+// Паспорт присылает любой признанный завод, не только СуперФит: пост
+// привязывается к бренду через свой аккаунт, а второй завод, которому
+// ответили бы 403, просто перестал бы размечать свой контент.
+const byKey = (req: Request) => factoryAuth(req) !== null;
 
 // Завод присылает паспорт поста при публикации: он единственный, кто точно
 // знает тип, тему, хук и призыв своего контента.

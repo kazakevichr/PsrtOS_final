@@ -42,7 +42,13 @@ function monthShift(month: string, delta: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export default function FactoryDashboard({ canManage = true }: { canManage?: boolean }) {
+export default function FactoryDashboard({
+  canManage = true,
+  projectName,
+}: {
+  canManage?: boolean;
+  projectName?: string;
+}) {
   const [tab, setTab] = useState<"plan" | "stats">("plan");
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [plan, setPlan] = useState<any>(null);
@@ -53,6 +59,11 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
   const [manual, setManual] = useState<any>(null);
   const [mBrand, setMBrand] = useState("all");
   const [days, setDays] = useState(30);
+
+  // Чей это завод. Матрица маршрутов и генерация тем описывают производство
+  // СуперФита — площадки, гайды, рационы; у второго завода свои площадки и
+  // свои темы, и показывать ему чужие настройки нечестно.
+  const isDefaultFactory = !plan || plan.brand === "superfit";
 
   async function loadPlan(m: string) {
     const r = await fetch(`/api/factory/plan-admin?month=${m}`);
@@ -141,7 +152,11 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold mb-1">Контент-завод</h1>
-          <p className="text-sm text-gray-500">План тем и статистика производства СуперФита</p>
+          <p className="text-sm text-gray-500">
+            {projectName
+              ? `План тем и статистика производства · ${projectName}`
+              : "План тем и статистика производства"}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
           {tab === "stats" && (
@@ -170,7 +185,7 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
       {/* Матрица маршрутов — настройка владельца: в режиме просмотра её не
           показываем и не спрашиваем, иначе раздел встречает партнёра пустым
           местом и 403 в консоли. */}
-      {tab === "plan" && canManage && <RouteMatrix canManage={canManage} />}
+      {tab === "plan" && canManage && isDefaultFactory && <RouteMatrix canManage={canManage} />}
 
       {tab === "plan" && plan && (
         <div className="card overflow-x-auto">
@@ -182,7 +197,7 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
               </span>
               <button className="btn" onClick={() => setMonth(monthShift(month, 1))}>→</button>
             </div>
-            {canManage && (
+            {canManage && isDefaultFactory && (
               <button className="btn btn-primary" onClick={generate} disabled={busy}>
                 {busy ? "Генерирую…" : "✨ Сгенерировать темы на месяц"}
               </button>
@@ -263,7 +278,9 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
             </div>
           )}
 
-          <QuotaBoard />
+          {/* Норма СММ описана по СуперФиту: super.fit24 и Лео. Чужому заводу
+              она не про него — как и кабинет, куда она ведёт. */}
+          {isDefaultFactory && <QuotaBoard />}
 
           {manual && (
             <div className="card">

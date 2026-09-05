@@ -308,16 +308,24 @@ model OracleChannel {
 // отдаёт тему дня по слоту, POST /api/factory/log принимает события заказа.
 model PlanSlot {
   id    String @id @default(cuid())
+  // Чей это план. Заводов больше одного: СуперФит и Оракл — разные проекты
+  // с разными темами, и без бренда их клетки затирали бы друг друга (ключ
+  // «дата+слот» у обоих одинаковый). Дефолт — СуперФит: всё, что накоплено
+  // до появления второго завода, его.
+  brand String @default("superfit")
   date  String // YYYY-MM-DD
   slot  String // make | carousel | trainer:male | trainer:female | avatar
   topic String @default("")
   facts String @default("")
 
-  @@unique([date, slot])
+  @@unique([brand, date, slot])
 }
 
 model FactoryJob {
   jobId     String   @id
+  // Какой завод отчитался. Заказы двух заводов лежат в одной таблице, и без
+  // этого поля Оракл видел бы производство СуперФита, а СуперФит — Оракла.
+  brand     String   @default("superfit")
   date      String   @default("")
   slot      String   @default("")
   kind      String   @default("")

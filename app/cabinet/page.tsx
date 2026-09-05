@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { currentAccess } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
-import { SMM_ROLES } from "@/lib/access";
+import { SMM_ROLES, socialScope } from "@/lib/access";
+import { DEFAULT_BRAND, factoryBrand } from "@/lib/factory";
 import CabinetView from "@/components/CabinetView";
 
 // Кабинет СММ: заработок по факту, норма дня, недели и доп задачи.
@@ -40,6 +41,23 @@ export default async function CabinetPage() {
         <h1 className="text-xl font-bold">Кабинет СММ</h1>
         <p className="card text-sm text-gray-500">
           У направления «{project.name}» нормы контента нет — она заводится вместе с заводом, в настройках проекта.
+        </p>
+      </div>
+    );
+  }
+
+  // Норма и ставки в кабинете описывают работу по СуперФиту: super.fit24 —
+  // два видео в день, Лео — четыре карусели, суммы в рублях за месяц. Своего
+  // завода мало, чтобы показывать её чужому направлению: включённый завод
+  // Оракла иначе притащил бы Ораклу чужую норму и чужую зарплату.
+  const scope = await socialScope();
+  if (scope && factoryBrand(scope) !== DEFAULT_BRAND) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl font-bold">Кабинет СММ</h1>
+        <p className="card text-sm text-gray-500">
+          Норма контента заведена только по СуперФиту. У этого направления своей нормы пока нет —
+          её нужно описать отдельно: аккаунты, штуки в день и ставка за месяц.
         </p>
       </div>
     );

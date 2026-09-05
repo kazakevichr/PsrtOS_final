@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { factoryAuth } from "@/lib/factory";
 import { notifyRoles } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
@@ -8,11 +9,11 @@ export const dynamic = "force-dynamic";
 // ошибка. События по одному job_id приходят по мере производства — храним
 // последнюю стадию и копим ссылки на опубликованные посты.
 export async function POST(req: Request) {
-  const need = process.env.IG_HOST_KEY;
-  if (!need || req.headers.get("x-factory-key") !== need) {
-    return new NextResponse("forbidden", { status: 403 });
-  }
   const b = await req.json().catch(() => null);
+  // Кто докладывает — решает ключ: заводов больше одного, и заказы Оракла не
+  // должны ложиться в журнал СуперФита.
+  const brand = factoryAuth(req, b);
+  if (!brand) return new NextResponse("forbidden", { status: 403 });
   if (!b?.job_id) return NextResponse.json({ error: "job_id required" }, { status: 400 });
 
   const row = await prisma.factoryJob.findUnique({ where: { jobId: b.job_id } });
@@ -22,6 +23,7 @@ export async function POST(req: Request) {
   const links = [...prevLinks, ...freshLinks.filter((l) => l && !seen.has(`${l.account}|${l.link}`))];
 
   const fields = {
+    brand,
     date: b.date ?? row?.date ?? "",
     slot: b.slot ?? row?.slot ?? "",
     kind: b.kind ?? row?.kind ?? "",
@@ -46,13 +48,12 @@ export async function POST(req: Request) {
   // клетку плана. Для avatar это единственный способ попасть в план (он не
   // планируется вперёд), для остальных слотов факт полезнее пустоты.
   if (fields.event === "опубликован" && fields.date && fields.slot && fields.topic) {
-    const cell = await prisma.planSlot.findUnique({
-      where: { date_slot: { date: fields.date, slot: fields.slot } },
-    });
+    const key = { brand, date: fields.date, slot: fields.slot };
+    const cell = await prisma.planSlot.findUnique({ where: { brand_date_slot: key } });
     if (!cell || !cell.topic.trim()) {
       await prisma.planSlot.upsert({
-        where: { date_slot: { date: fields.date, slot: fields.slot } },
-        create: { date: fields.date, slot: fields.slot, topic: fields.topic, facts: "" },
+        where: { brand_date_slot: key },
+        create: { ...key, topic: fields.topic, facts: "" },
         update: { topic: fields.topic },
       });
     }

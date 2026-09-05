@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { SMM_ROLES } from "@/lib/access";
+import { socialScope } from "@/lib/access";
 import { brandFor } from "@/lib/insta";
 
 export const dynamic = "force-dynamic";
@@ -16,10 +14,8 @@ const norm = (u: string) =>
 const VIDEO = ["REELS", "VIDEO", "CLIPS"];
 
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session || !SMM_ROLES.includes(session.user.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const scope = await socialScope();
+  if (!scope) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const days = Number(new URL(req.url).searchParams.get("days") || 60);
   const edge = new Date(Date.now() - days * 864e5).toISOString();
 
@@ -38,6 +34,9 @@ export async function GET(req: Request) {
     // Партнёрские страницы Лео (business_discovery) — не наша ручная работа:
     // они живут только в норме СММ.
     if (acc.igId.startsWith("bd:")) continue;
+    // Рамки направления — те же, что в Соц.Сетях: чужие аккаунты в счёт
+    // ручной работы не идут.
+    if (scope.brands && !scope.brands.includes(acc.brand)) continue;
     const media: any[] = JSON.parse(acc.media);
     for (const m of media) {
       if (!m.timestamp || m.timestamp < edge) continue;

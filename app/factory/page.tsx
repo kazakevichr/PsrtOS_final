@@ -30,6 +30,12 @@ export default async function FactoryPage() {
   if (!SMM_ROLES.includes(access.role)) redirect("/payroll");
 
   const project = await factoryGate(access.projectId);
+  const name = access.projectId
+    ? (await prisma.project.findUnique({
+        where: { id: access.projectId },
+        select: { name: true },
+      }))?.name
+    : undefined;
 
   if (project) {
     return (
@@ -42,5 +48,5 @@ export default async function FactoryPage() {
     );
   }
 
-  return <FactoryDashboard canManage={access.canEdit} />;
+  return <FactoryDashboard canManage={access.canEdit} projectName={name} />;
 }

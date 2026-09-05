@@ -1,20 +1,18 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { SMM_ROLES } from "@/lib/access";
+import { socialScope } from "@/lib/access";
+import { factoryBrand } from "@/lib/factory";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session || !SMM_ROLES.includes(session.user.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const scope = await socialScope();
+  if (!scope) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const brand = factoryBrand(scope);
   const days = Number(new URL(req.url).searchParams.get("days") || 30);
   const since = new Date(Date.now() - days * 864e5);
   const rows = await prisma.factoryJob.findMany({
-    where: { at: { gte: since } },
+    where: { brand, at: { gte: since } },
     orderBy: { at: "desc" },
     take: 500,
   });

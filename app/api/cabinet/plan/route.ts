@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { SMM_ROLES } from "@/lib/access";
+import { DEFAULT_BRAND } from "@/lib/factory";
 
 export const dynamic = "force-dynamic";
 
@@ -49,8 +50,8 @@ export async function PUT(req: Request) {
   }
   const fields = { topic: String(b.topic ?? ""), facts: String(b.facts ?? "") };
   const row = await prisma.planSlot.upsert({
-    where: { date_slot: { date: b.date, slot: b.slot } },
-    create: { date: b.date, slot: b.slot, ...fields },
+    where: { brand_date_slot: { brand: DEFAULT_BRAND, date: b.date, slot: b.slot } },
+    create: { brand: DEFAULT_BRAND, date: b.date, slot: b.slot, ...fields },
     update: fields,
   });
   return NextResponse.json(row);
@@ -114,7 +115,7 @@ export async function POST(req: Request) {
     if (!it?.date || !it?.slot || !it?.topic || !String(it.slot).startsWith("smm:")) continue;
     if (filled.has(`${it.date}|${it.slot}`)) continue;
     await prisma.planSlot.upsert({
-      where: { date_slot: { date: it.date, slot: it.slot } },
+      where: { brand_date_slot: { brand: DEFAULT_BRAND, date: it.date, slot: it.slot } },
       create: { date: it.date, slot: it.slot, topic: String(it.topic), facts: String(it.facts || "") },
       update: { topic: String(it.topic), facts: String(it.facts || "") },
     });

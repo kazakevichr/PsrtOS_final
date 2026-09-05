@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { SMM_ROLES } from "@/lib/access";
+import { socialScope } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
-import { planSlots } from "@/lib/factory";
+import { DEFAULT_BRAND, factoryBrand, planSlots } from "@/lib/factory";
 
 async function owner() {
   const session = await getServerSession(authOptions);
@@ -14,11 +14,8 @@ async function owner() {
 }
 
 // План может смотреть весь блок СММ, включая партнёра; править и
-// генерировать — только владелец.
-async function viewer() {
-  const session = await getServerSession(authOptions);
-  return session && SMM_ROLES.includes(session.user.role);
-}
+// генерировать — только владелец. Заодно рамки говорят, чей это завод:
+// у Оракла и СуперФита планы разные.
 
 function monthDates(month: string): string[] {
   const [y, m] = month.split("-").map(Number);
@@ -27,20 +24,29 @@ function monthDates(month: string): string[] {
 }
 
 export async function GET(req: Request) {
-  if (!(await viewer())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const scope = await socialScope();
+  if (!scope) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const brand = factoryBrand(scope);
   const month = new URL(req.url).searchParams.get("month") || new Date().toISOString().slice(0, 7);
-  const rows = await prisma.planSlot.findMany({ where: { date: { startsWith: month } } });
-  return NextResponse.json({ month, slots: await planSlots(), dates: monthDates(month), plan: rows });
+  const rows = await prisma.planSlot.findMany({
+    where: { brand, date: { startsWith: month } },
+  });
+  return NextResponse.json({
+    month, brand, slots: await planSlots(brand), dates: monthDates(month), plan: rows,
+  });
 }
 
 export async function PUT(req: Request) {
   if (!(await owner())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const scope = await socialScope();
+  if (!scope) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const brand = factoryBrand(scope);
   const b = await req.json();
   if (!b?.date || !b?.slot) return NextResponse.json({ error: "date+slot required" }, { status: 400 });
   const fields = { topic: String(b.topic ?? ""), facts: String(b.facts ?? "") };
   const row = await prisma.planSlot.upsert({
-    where: { date_slot: { date: b.date, slot: b.slot } },
-    create: { date: b.date, slot: b.slot, ...fields },
+    where: { brand_date_slot: { brand, date: b.date, slot: b.slot } },
+    create: { brand, date: b.date, slot: b.slot, ...fields },
     update: fields,
   });
   return NextResponse.json(row);
@@ -49,15 +55,29 @@ export async function PUT(req: Request) {
 // Генерация тем на месяц: LLM заполняет ТОЛЬКО пустые ячейки активных слотов.
 export async function POST(req: Request) {
   if (!(await owner())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const scope = await socialScope();
+  if (!scope) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const brand = factoryBrand(scope);
+  // Подсказки по типам ниже описывают контент СуперФита — гайды, рационы,
+  // тренировки. Придумывать по ним темы чужому заводу значит выдать ему
+  // фитнес-план под видом своего; лучше честно отказать.
+  if (brand !== DEFAULT_BRAND) {
+    return NextResponse.json(
+      { error: "генерация тем заведена только для СуперФита — темы этого завода вносятся вручную" },
+      { status: 400 }
+    );
+  }
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "нет OPENAI_API_KEY" }, { status: 500 });
   const b = await req.json().catch(() => ({}));
   const month = b.month || new Date().toISOString().slice(0, 7);
 
-  const existing = await prisma.planSlot.findMany({ where: { date: { startsWith: month } } });
+  const existing = await prisma.planSlot.findMany({
+    where: { brand, date: { startsWith: month } },
+  });
   const filled = new Set(existing.filter((r) => r.topic.trim()).map((r) => `${r.date}|${r.slot}`));
   const need: { date: string; slot: string }[] = [];
-  const slots = await planSlots();
+  const slots = await planSlots(brand);
   for (const date of monthDates(month)) {
     for (const s of slots.filter((s) => s.active)) {
       if (!filled.has(`${date}|${s.slot}`)) need.push({ date, slot: s.slot });
@@ -107,8 +127,8 @@ export async function POST(req: Request) {
     if (!it?.date || !it?.slot || !it?.topic) continue;
     if (filled.has(`${it.date}|${it.slot}`)) continue;
     await prisma.planSlot.upsert({
-      where: { date_slot: { date: it.date, slot: it.slot } },
-      create: { date: it.date, slot: it.slot, topic: String(it.topic), facts: String(it.facts || "") },
+      where: { brand_date_slot: { brand, date: it.date, slot: it.slot } },
+      create: { brand, date: it.date, slot: it.slot, topic: String(it.topic), facts: String(it.facts || "") },
       update: { topic: String(it.topic), facts: String(it.facts || "") },
     });
     generated++;
