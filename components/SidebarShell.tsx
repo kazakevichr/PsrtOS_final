@@ -45,7 +45,7 @@ export default function SidebarShell({
             <line x1="4" y1="18" x2="20" y2="18" />
           </svg>
         </button>
-        <span className="font-bold text-brand-700 text-sm">PartnerOS</span>
+        <span className="font-bold text-brand-700 text-sm">Postos</span>
       </div>
 
       {/* Затемнение фона на мобильных, когда меню открыто */}
@@ -62,7 +62,7 @@ export default function SidebarShell({
         } md:translate-x-0`}
       >
         <div className="px-4 py-4 border-b border-gray-100 flex items-center justify-between">
-          <span className="font-bold text-brand-700">PartnerOS</span>
+          <span className="font-bold text-brand-700">Postos</span>
           <button
             type="button"
             aria-label="Закрыть меню"

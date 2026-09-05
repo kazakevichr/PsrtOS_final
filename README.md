@@ -1,6 +1,6 @@
-# PartnerOS
+# Postos
 
-Система управления партнёрской сетью и расчёта мотивации сотрудников. Реализована по ТЗ (`PartnerOS_TZ.md`) на основе обсуждения экономики проектов Oracle, SUPERFIT24, Velar24, VPN и Музлото.
+Система управления партнёрской сетью и расчёта мотивации сотрудников. Реализована на основе обсуждения экономики проектов Oracle, SUPERFIT24, Velar24, VPN и Музлото.
 
 Стек: Next.js 14 (App Router, TypeScript) + PostgreSQL/SQLite + Prisma + NextAuth + TailwindCSS.
 Для локального запуска используется SQLite (файл `dev.db`) — не нужно поднимать отдельный сервер БД.
@@ -22,7 +22,7 @@
 Требования: Node.js 20+, npm.
 
 ```bash
-cd partneros
+cd postos
 npm install              # поставит зависимости и сгенерирует Prisma Client
 npx prisma migrate dev --name init   # создаст dev.db и таблицы
 npm run seed              # заполнит демо-данными (проекты, партнёры, сотрудники)

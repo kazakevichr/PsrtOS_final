@@ -4,7 +4,7 @@ import Providers from "@/components/Providers";
 import Navbar from "@/components/Navbar";
 
 export const metadata: Metadata = {
-  title: "PartnerOS",
+  title: "Postos",
   description: "Система управления партнёрской сетью",
 };
 
