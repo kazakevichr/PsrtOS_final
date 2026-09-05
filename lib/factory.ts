@@ -34,12 +34,56 @@ export function factoryBrand(scope: SocialScope): string {
 }
 
 /**
+ * Ключи заводов из настроек: «ключ → бренд».
+ *
+ * Основной формат — простые пары «бренд:ключ» через запятую:
+ *
+ *     FACTORY_KEYS=oracle:9f2c…,party:1ab4…
+ *
+ * Без кавычек и фигурных скобок намеренно: значение вписывают руками в поле
+ * панели, а панели любят толковать скобки по-своему — Coolify, например,
+ * подставляет по {{…}}. Значение, которое нечем испортить, не придётся
+ * потом искать по симптому «ключ верный, а в ответе forbidden».
+ *
+ * JSON тоже принимаем — он был первым, и уже вписанное менять незачем.
+ */
+function keyMap(): Record<string, string> {
+  const raw = (process.env.FACTORY_KEYS || "").trim();
+  if (!raw) return {};
+
+  if (raw.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(raw);
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        if (typeof v === "string" && v.trim()) out[k] = v.trim();
+      }
+      return out;
+    } catch {
+      // Кривая настройка не должна ронять приём отчётов завода.
+      return {};
+    }
+  }
+
+  const out: Record<string, string> = {};
+  for (const pair of raw.split(",")) {
+    // Ключ может содержать двоеточие, бренд — нет: режем по первому.
+    const at = pair.indexOf(":");
+    if (at < 1) continue;
+    const brand = pair.slice(0, at).trim();
+    const key = pair.slice(at + 1).trim();
+    if (brand && key) out[key] = brand;
+  }
+  return out;
+}
+
+/**
  * Бренд завода, приславшего запрос.
  *
  * Экземпляры заводов ходят к нам по ключу. Основной ключ (IG_HOST_KEY) — это
- * СуперФит, как было; ключи остальных перечисляются в FACTORY_KEYS картой
- * «ключ → бренд». Так второй завод подключается сменой одной переменной в
- * его окружении, без правки его кода: чужой проект трогать нечем.
+ * СуперФит, как было; ключи остальных перечисляются в FACTORY_KEYS. Так
+ * второй завод подключается сменой одной переменной в его окружении, без
+ * правки его кода: чужой проект трогать нечем.
  *
  * Если завод всё же умеет представиться сам — заголовком X-Factory-Brand
  * или полем brand в теле, — его слово главнее.
@@ -50,17 +94,10 @@ export function factoryAuth(req: Request, body?: any): string | null {
   const key = req.headers.get("x-factory-key") || "";
   if (!key) return null;
 
-  let brand: string | null = null;
-  if (process.env.IG_HOST_KEY && key === process.env.IG_HOST_KEY) brand = DEFAULT_BRAND;
-  if (!brand) {
-    try {
-      const map = JSON.parse(process.env.FACTORY_KEYS || "{}");
-      const named = map[key];
-      if (typeof named === "string" && named.trim()) brand = named.trim();
-    } catch {
-      // Кривой JSON в настройках не должен ронять приём отчётов завода.
-    }
-  }
+  const brand =
+    process.env.IG_HOST_KEY && key === process.env.IG_HOST_KEY
+      ? DEFAULT_BRAND
+      : keyMap()[key] || null;
   if (!brand) return null;
 
   const said = String(req.headers.get("x-factory-brand") || body?.brand || "").trim();
