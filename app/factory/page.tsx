@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { currentAccess } from "@/lib/access";
+import { SMM_ROLES, currentAccess } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import FactoryDashboard from "@/components/FactoryDashboard";
 
@@ -27,7 +27,7 @@ async function factoryGate(projectId: string | null) {
 export default async function FactoryPage() {
   const access = await currentAccess();
   if (!access) redirect("/login");
-  if (!["OWNER", "SMM", "PARTNER"].includes(access.role)) redirect("/payroll");
+  if (!SMM_ROLES.includes(access.role)) redirect("/payroll");
 
   const project = await factoryGate(access.projectId);
 

@@ -1,10 +1,13 @@
 import { redirect } from "next/navigation";
 import { currentAccess } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
+import { SMM_ROLES } from "@/lib/access";
 import CabinetView from "@/components/CabinetView";
 
 // Кабинет СММ: заработок по факту, норма дня, недели и доп задачи.
 // Владелец видит то же самое — цифры общие, спорить не о чем.
+// Партнёр — тоже: производство контента идёт по его направлению и за его
+// счёт, и норма, за которую он платит, не может быть от него закрыта.
 /**
  * Есть ли у направления свой завод — и стоит ли вообще спрашивать.
  *
@@ -27,7 +30,7 @@ async function factoryGate(projectId: string | null) {
 export default async function CabinetPage() {
   const access = await currentAccess();
   if (!access) redirect("/login");
-  if (!["OWNER", "SMM"].includes(access.role)) redirect("/payroll");
+  if (!SMM_ROLES.includes(access.role)) redirect("/payroll");
 
   const project = await factoryGate(access.projectId);
 
@@ -42,5 +45,5 @@ export default async function CabinetPage() {
     );
   }
 
-  return <CabinetView />;
+  return <CabinetView canManage={access.canEdit} />;
 }

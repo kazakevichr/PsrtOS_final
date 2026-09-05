@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { inScope, socialScope } from "@/lib/access";
 import { brandFor } from "@/lib/insta";
 
 
@@ -10,10 +9,8 @@ export const dynamic = "force-dynamic";
 // Все аккаунты всех платформ одной формой: платформа + проект (бренд) +
 // профиль — три оси, по которым фильтрует дашборд «Соц.Сети».
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session || !["OWNER", "SMM"].includes(session.user.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const scope = await socialScope();
+  if (!scope) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   // Источник правды о заводских постах — журнал завода: события «опубликован»
   // несут permalink. Деление по аккаунтам устарело: завод постит и в
@@ -95,5 +92,8 @@ export async function GET() {
     });
   }
 
-  return NextResponse.json({ accounts });
+  // Рамки направления режем здесь, а не на показе: клиент фильтрует те же
+  // бренды, но у партнёра это единственная граница — отдавать ему чужие
+  // аккаунты и надеяться, что браузер их спрячет, значит не иметь границы.
+  return NextResponse.json({ accounts: inScope(accounts, scope.brands) });
 }

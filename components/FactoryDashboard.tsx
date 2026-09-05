@@ -167,7 +167,10 @@ export default function FactoryDashboard({ canManage = true }: { canManage?: boo
       </div>
       {note && <p className="text-sm text-gray-500">{note}</p>}
 
-      {tab === "plan" && <RouteMatrix canManage={canManage} />}
+      {/* Матрица маршрутов — настройка владельца: в режиме просмотра её не
+          показываем и не спрашиваем, иначе раздел встречает партнёра пустым
+          местом и 403 в консоли. */}
+      {tab === "plan" && canManage && <RouteMatrix canManage={canManage} />}
 
       {tab === "plan" && plan && (
         <div className="card overflow-x-auto">

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { brandsOf } from "@/lib/brands";
 
 // Кто что видит. Единственное место, где решается доступ к направлениям, —
 // чтобы правило нельзя было случайно повторить по-разному в двадцати файлах.
@@ -162,4 +163,59 @@ export function taskWhere(access: Access) {
 /** Есть ли у человека доступ к конкретному направлению. */
 export function mayTouchProject(access: Access, projectId: string): boolean {
   return access.isOwner || access.unscoped || access.projects.some((p) => p.id === projectId);
+}
+
+/**
+ * Роли, которым открыт блок СММ.
+ *
+ * Партнёр смотрит соцсети своего направления — это его же цифры, и прятать
+ * их не от кого. Запись ему закрыта не здесь, а в middleware: одно правило на
+ * все ручки надёжнее, чем проверка, о которой забудут в следующей.
+ */
+export const SMM_ROLES = ["OWNER", "SMM", "PARTNER"];
+
+export type SocialScope = {
+  access: Access;
+  /**
+   * Бренды, дальше которых человеку смотреть нечего.
+   * null — рамок нет: владелец в сводном режиме.
+   */
+  brands: string[] | null;
+};
+
+/** Бренды выбранного направления, а в сводном режиме — всех доступных. */
+async function scopeBrands(access: Access): Promise<string[] | null> {
+  if (access.projectId) {
+    const p = await prisma.project.findUnique({
+      where: { id: access.projectId },
+      select: { name: true, brandKeys: true },
+    });
+    // Направление без аккаунтов — пустые рамки, а не «показать всё».
+    return p ? brandsOf(p) : [];
+  }
+  if (access.isOwner || access.unscoped) return null;
+  const rows = await prisma.project.findMany({
+    where: { isActive: true, id: { in: access.projects.map((p) => p.id) } },
+    select: { name: true, brandKeys: true },
+  });
+  return [...new Set(rows.flatMap((p) => brandsOf(p)))];
+}
+
+/**
+ * Рамки для ручек СММ: кто спрашивает и что ему видно.
+ * null — спрашивать нечего, ручка отвечает 403.
+ *
+ * Рамки считает сервер, а не клиент. Раньше нейро-аналитика получала список
+ * брендов параметром запроса — то есть срез направления держался на честном
+ * слове браузера и снимался подменой адреса.
+ */
+export async function socialScope(): Promise<SocialScope | null> {
+  const access = await currentAccess();
+  if (!access || !SMM_ROLES.includes(access.role)) return null;
+  return { access, brands: await scopeBrands(access) };
+}
+
+/** Оставить из списка только то, что попадает в рамки направления. */
+export function inScope<T extends { brand: string }>(rows: T[], brands: string[] | null): T[] {
+  return brands ? rows.filter((r) => brands.includes(r.brand)) : rows;
 }

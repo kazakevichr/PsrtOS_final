@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { currentAccess } from "@/lib/access";
+import { SMM_ROLES, currentAccess } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import { brandsOf } from "@/lib/brands";
 import SocialDashboard from "@/components/SocialDashboard";
@@ -9,7 +9,7 @@ import SocialDashboard from "@/components/SocialDashboard";
 export default async function SocialPage() {
   const access = await currentAccess();
   if (!access) redirect("/login");
-  if (!["OWNER", "SMM", "PARTNER"].includes(access.role)) redirect("/payroll");
+  if (!SMM_ROLES.includes(access.role)) redirect("/payroll");
 
   const project = access.projectId
     ? await prisma.project.findUnique({

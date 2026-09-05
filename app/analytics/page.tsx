@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { currentAccess } from "@/lib/access";
+import { SMM_ROLES, currentAccess } from "@/lib/access";
 import { prisma } from "@/lib/prisma";
 import { brandsOf } from "@/lib/brands";
 import NeuroAnalytics from "@/components/NeuroAnalytics";
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AnalyticsPage() {
   const access = await currentAccess();
-  if (!access || !["OWNER", "SMM", "PARTNER"].includes(access.role)) redirect("/");
+  if (!access || !SMM_ROLES.includes(access.role)) redirect("/");
 
   // Аналитика разбирает те же аккаунты, что и Соц.Сети, — значит и рамки
   // направления у них должны быть одни.
@@ -37,10 +37,6 @@ export default async function AnalyticsPage() {
   }
 
   return (
-    <NeuroAnalytics
-      isOwner={access.canEdit}
-      brands={brands.length ? brands : undefined}
-      projectName={project?.name}
-    />
+    <NeuroAnalytics isOwner={access.canEdit} projectName={project?.name} />
   );
 }

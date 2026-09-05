@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { SMM_ROLES } from "@/lib/access";
 import { brandFor } from "@/lib/insta";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ const VIDEO = ["REELS", "VIDEO", "CLIPS"];
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || !["OWNER", "SMM"].includes(session.user.role)) {
+  if (!session || !SMM_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const days = Number(new URL(req.url).searchParams.get("days") || 60);

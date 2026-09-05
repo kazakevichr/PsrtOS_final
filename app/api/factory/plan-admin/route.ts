@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { SMM_ROLES } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +13,11 @@ async function owner() {
   return session && session.user.role === "OWNER";
 }
 
-// План может смотреть и СММ; править и генерировать — только владелец.
+// План может смотреть весь блок СММ, включая партнёра; править и
+// генерировать — только владелец.
 async function viewer() {
   const session = await getServerSession(authOptions);
-  return session && ["OWNER", "SMM"].includes(session.user.role);
+  return session && SMM_ROLES.includes(session.user.role);
 }
 
 function monthDates(month: string): string[] {

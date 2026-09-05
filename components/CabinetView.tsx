@@ -24,7 +24,7 @@ const monthKey = (back: number) => {
   return d.toISOString().slice(0, 7);
 };
 
-export default function CabinetView() {
+export default function CabinetView({ canManage = true }: { canManage?: boolean }) {
   const [data, setData] = useState<any>(null);
   const [page, setPage] = useState(0);
   const [back, setBack] = useState(0);
@@ -196,7 +196,7 @@ export default function CabinetView() {
           </div>
         </div>
       )}
-      <SmmPlan />
+      <SmmPlan canManage={canManage} />
 
     </div>
   );

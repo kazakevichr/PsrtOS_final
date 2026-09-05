@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { socialScope } from "@/lib/access";
 import { metaMap, normLink } from "@/lib/meta";
 import { generateInsight, savedInsight, confidence } from "@/lib/insights";
 import { notifyUser } from "@/lib/telegram";
@@ -9,17 +10,34 @@ import { notifyUser } from "@/lib/telegram";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-async function role() {
-  const s = await getServerSession(authOptions);
-  return s && ["OWNER", "SMM"].includes(s.user.role) ? s.user.role : null;
-}
-
 const median = (xs: number[]) => {
   if (!xs.length) return 0;
   const s = [...xs].sort((a, b) => a - b);
   const mid = Math.floor(s.length / 2);
   return s.length % 2 ? s[mid] : Math.round((s[mid - 1] + s[mid]) / 2);
 };
+
+/**
+ * Ключ среза, под которым лежат вывод и рекомендации.
+ *
+ * В ключ входят рамки направления, а не только аккаунт и дни. Без них у
+ * партнёра Оракла и у владельца, смотрящего все бренды сразу, срез «все
+ * аккаунты за 30 дней» — это один и тот же ключ `neuro:all:30`, и партнёр
+ * читал бы вывод, посчитанный по чужим аккаунтам.
+ *
+ * Без рамок ключ остаётся прежним — чтобы уже накопленные выводы владельца
+ * не осиротели.
+ */
+function scopeKey(brands: string[] | null, account: string, days: number) {
+  const tag = brands ? [...brands].sort().join("+") || "none" : null;
+  return tag ? `neuro:${tag}:${account}:${days}` : `neuro:${account}:${days}`;
+}
+
+/** Все срезы этого направления — по ним отбираются рекомендации. */
+function scopePrefix(brands: string[] | null) {
+  const tag = brands ? [...brands].sort().join("+") || "none" : null;
+  return tag ? `neuro:${tag}:` : null;
+}
 
 // Посты выбранного среза с паспортом: аккаунт (или все), давность в днях.
 async function buildPosts(account: string, days: number, brands?: string[]) {
@@ -61,14 +79,14 @@ async function buildPosts(account: string, days: number, brands?: string[]) {
 }
 
 export async function GET(req: Request) {
-  const r = await role();
-  if (!r) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  // Рамки направления берём из доступа, а не из адреса запроса: раньше список
+  // брендов присылал браузер, и партнёр видел ровно то, что сам попросил.
+  const scope = await socialScope();
+  if (!scope) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const url = new URL(req.url);
   const account = url.searchParams.get("account") || "all";
   const days = Math.min(365, Number(url.searchParams.get("days")) || 30);
-  const brandsRaw = url.searchParams.get("brands") || "";
-  const brands = brandsRaw ? brandsRaw.split(",").map((b) => b.trim()).filter(Boolean) : undefined;
-  const { posts, accounts } = await buildPosts(account, days, brands);
+  const { posts, accounts } = await buildPosts(account, days, scope.brands ?? undefined);
 
   // Срезы по осям паспорта: медианный охват, только посты старше 72 часов.
   const mature = posts.filter(
@@ -98,8 +116,14 @@ export async function GET(req: Request) {
   }
 
   // Судьба рекомендаций: если задача из рекомендации закрыта — фиксируем.
+  // Берём только рекомендации своего направления: совет про карусели
+  // СуперФита в разделе Оракла — не совет, а шум.
+  const prefix = scopePrefix(scope.brands);
   const recs = await prisma.recommendation.findMany({
-    where: { status: { not: "dismissed" } },
+    where: {
+      status: { not: "dismissed" },
+      ...(prefix ? { scope: { startsWith: prefix } } : {}),
+    },
     orderBy: { createdAt: "desc" },
     take: 15,
   });
@@ -136,7 +160,7 @@ export async function GET(req: Request) {
         per100: g.reach ? Math.round((g.leads / g.reach) * 1000) / 10 : 0,
       }))
       .sort((a, b) => b.leads - a.leads),
-    insight: await savedInsight(`neuro:${account}:${days}`),
+    insight: await savedInsight(scopeKey(scope.brands, account, days)),
     recommendations: recs.map((x) => ({
       id: x.id, text: x.text, status: x.status, effect: x.effect,
       createdAt: x.createdAt, doneAt: x.doneAt,
@@ -155,9 +179,11 @@ export async function POST(req: Request) {
   if (b?.action === "refresh") {
     const account = b.account || "all";
     const days = Math.min(365, Number(b.days) || 30);
-    const { posts } = await buildPosts(account, days);
+    const scope = await socialScope();
+    const brands = scope?.brands ?? null;
+    const { posts } = await buildPosts(account, days, brands ?? undefined);
     try {
-      const insight = await generateInsight(`neuro:${account}:${days}`, posts);
+      const insight = await generateInsight(scopeKey(brands, account, days), posts);
       return NextResponse.json({ insight });
     } catch (e: any) {
       return NextResponse.json({ error: e.message }, { status: 500 });

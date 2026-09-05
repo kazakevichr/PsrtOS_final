@@ -10,7 +10,7 @@ function monthShift(month: string, delta: number) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export default function SmmPlan() {
+export default function SmmPlan({ canManage = true }: { canManage?: boolean }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [plan, setPlan] = useState<any>(null);
   const [busy, setBusy] = useState(false);
@@ -28,6 +28,7 @@ export default function SmmPlan() {
     (plan?.plan || []).find((r: any) => r.date === date && r.slot === slot);
 
   async function saveCell(date: string, slot: string, topic: string) {
+    if (!canManage) return;
     const prev = cell(date, slot)?.topic || "";
     if (topic.trim() === prev.trim()) return;
     await fetch("/api/cabinet/plan", {
@@ -69,12 +70,16 @@ export default function SmmPlan() {
           </span>
           <button className="btn text-xs" onClick={() => setMonth(monthShift(month, 1))}>→</button>
         </div>
-        <button className="btn btn-primary text-sm" onClick={generate} disabled={busy}>
-          {busy ? "Генерирую…" : "✨ Сгенерировать темы"}
-        </button>
+        {canManage && (
+          <button className="btn btn-primary text-sm" onClick={generate} disabled={busy}>
+            {busy ? "Генерирую…" : "✨ Сгенерировать темы"}
+          </button>
+        )}
       </div>
       <p className="text-xs text-gray-400 mb-3">
-        Темы вносятся вручную прямо в ячейки — сохраняется само. Воскресенье — выходной.
+        {canManage
+          ? "Темы вносятся вручную прямо в ячейки — сохраняется само. Воскресенье — выходной."
+          : "План на месяц, только для чтения. Воскресенье — выходной."}
       </p>
       {note && <p className="text-sm text-gray-500 mb-2">{note}</p>}
 
@@ -103,8 +108,9 @@ export default function SmmPlan() {
                       <textarea
                         rows={2}
                         defaultValue={cell(date, s.slot)?.topic || ""}
-                        placeholder="тема…"
+                        placeholder={canManage ? "тема…" : ""}
                         title={cell(date, s.slot)?.facts || ""}
+                        readOnly={!canManage}
                         onBlur={(e) => saveCell(date, s.slot, e.target.value)}
                         className="w-full text-xs border rounded-md p-1.5 resize-none bg-white focus:outline-none focus:ring-1 focus:ring-brand-500"
                       />

@@ -131,13 +131,19 @@ export async function generateInsight(scope: string, posts: any[]): Promise<Insi
   const parsed = check.data;
 
   // Новые рекомендации сохраняются и живут между анализами.
+  //
+  // Дедуп идёт по тексту, а срез теперь отбирает рекомендации своего
+  // направления — поэтому у совпавшей записи обновляем срез: иначе совет,
+  // выданный разбором Оракла, остался бы висеть в направлении, которое
+  // придумало ту же формулировку первым, и в Оракле не появился бы вовсе.
+  // Статус и привязанную задачу не трогаем — их судьба своя.
   for (const t of parsed.recommendations) {
     const n = recNorm(t);
     if (!n) continue;
     await prisma.recommendation.upsert({
       where: { norm: n },
       create: { norm: n, text: t, scope },
-      update: {},
+      update: { scope },
     });
   }
 

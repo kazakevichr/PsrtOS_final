@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { SMM_ROLES } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,14 @@ const SMM_SLOTS = [
   { slot: "smm:leo", label: "🎠 Лео · тема дня (4 карусели)", active: true },
 ];
 
-async function allowed() {
+// Смотреть план может весь блок СММ, партнёр в том числе; правит его сама
+// СММ и владелец.
+async function viewer() {
+  const s = await getServerSession(authOptions);
+  return s && SMM_ROLES.includes(s.user.role);
+}
+
+async function editor() {
   const s = await getServerSession(authOptions);
   return s && ["OWNER", "SMM"].includes(s.user.role);
 }
@@ -25,7 +33,7 @@ function monthDates(month: string): string[] {
 }
 
 export async function GET(req: Request) {
-  if (!(await allowed())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await viewer())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const month = new URL(req.url).searchParams.get("month") || new Date().toISOString().slice(0, 7);
   const rows = await prisma.planSlot.findMany({
     where: { date: { startsWith: month }, slot: { startsWith: "smm:" } },
@@ -34,7 +42,7 @@ export async function GET(req: Request) {
 }
 
 export async function PUT(req: Request) {
-  if (!(await allowed())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await editor())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const b = await req.json().catch(() => null);
   if (!b?.date || !b?.slot || !b.slot.startsWith("smm:")) {
     return NextResponse.json({ error: "date+slot (smm:*) required" }, { status: 400 });
@@ -50,7 +58,7 @@ export async function PUT(req: Request) {
 
 // Генерация тем: заполняет только пустые ячейки месяца.
 export async function POST(req: Request) {
-  if (!(await allowed())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await editor())) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "нет OPENAI_API_KEY" }, { status: 500 });
   const b = await req.json().catch(() => ({}));

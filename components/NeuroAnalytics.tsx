@@ -54,13 +54,11 @@ function Bars({ title, rows }: { title: string; rows: any[] }) {
 
 export default function NeuroAnalytics({
   isOwner,
-  brands,
   projectName,
 }: {
   isOwner: boolean;
-  // Бренды выбранного направления: аналитика разбирает те же аккаунты, что
-  // показывают Соц.Сети, значит и рамки у них общие.
-  brands?: string[];
+  // Рамки направления живут на сервере: разбираются те же аккаунты, что
+  // показывают Соц.Сети. Отсюда нужно только имя — для подписи среза.
   projectName?: string;
 }) {
   const [account, setAccount] = useState("all");
@@ -70,8 +68,9 @@ export default function NeuroAnalytics({
   const [note, setNote] = useState("");
 
   async function load(acc = account, d = days) {
-    const scope = brands?.length ? `&brands=${encodeURIComponent(brands.join(","))}` : "";
-    const r = await fetch(`/api/analytics?account=${encodeURIComponent(acc)}&days=${d}${scope}`);
+    // Рамки направления сервер знает сам из доступа — присылать их отсюда
+    // значило бы позволить браузеру расширить себе видимость.
+    const r = await fetch(`/api/analytics?account=${encodeURIComponent(acc)}&days=${d}`);
     if (r.ok) setData(await r.json());
   }
   useEffect(() => { load(); }, [account, days]);

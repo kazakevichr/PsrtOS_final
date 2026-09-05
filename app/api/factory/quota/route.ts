@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { SMM_ROLES } from "@/lib/access";
 import { earnings, quotaDays, quotaMonth } from "@/lib/quota";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
   const session = await getServerSession(authOptions);
-  if (!session || !["OWNER", "SMM"].includes(session.user.role)) {
+  if (!session || !SMM_ROLES.includes(session.user.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const url = new URL(req.url);
