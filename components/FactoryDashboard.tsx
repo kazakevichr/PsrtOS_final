@@ -380,7 +380,7 @@ export default function FactoryDashboard({
                   </summary>
                   {j.script && <p className="text-xs text-gray-600 mt-2 whitespace-pre-wrap">{j.script}</p>}
                   {j.error && <p className="text-xs text-red-600 mt-1">{j.error}</p>}
-                  {["опубликован", "готов"].includes(j.event) && (
+                  {canManage && ["опубликован", "готов"].includes(j.event) && (
                     <button
                       className="mt-2 text-xs border border-red-300 text-red-700 rounded-md px-2 py-1 hover:bg-red-50"
                       onClick={(e) => { e.preventDefault(); markDefect(j.jobId); }}

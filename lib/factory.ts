@@ -2,6 +2,7 @@
 // слот жив, когда его тип в матрице стоит «по времени», и заморожен, когда
 // «по запросу», — переключение в маршрутах сразу меняет план и генерацию.
 import { prisma } from "@/lib/prisma";
+import { brandFor } from "@/lib/insta";
 import { scheduleMap } from "@/lib/routes";
 import type { SocialScope } from "@/lib/access";
 
@@ -105,6 +106,46 @@ export function factoryAuth(req: Request, body?: any): string | null {
 }
 
 /**
+ * Чей это заказ — по аккаунту, куда он опубликован.
+ *
+ * Так же, как в соцсетях: бренд аккаунта берётся из BRAND_MAP, а канал, в
+ * карте не названный, остаётся оракловским. Заводы уже докладывают, куда
+ * выложили пост, — значит принадлежность известна и настраивать её незачем.
+ *
+ * Заказ ещё без ссылок (в производстве) относим по типу контента: типы у
+ * заводов свои, и тип, который прежде выходил у Оракла, оракловский и
+ * сейчас. Не выяснилось ничего — остаётся то, что записано при приёме.
+ */
+export function jobBrands(
+  rows: { jobId: string; kind: string; links: string; brand: string }[]
+): Map<string, string> {
+  const byJob = new Map<string, string>();
+  const byKind = new Map<string, string>();
+
+  for (const r of rows) {
+    let links: any[] = [];
+    try {
+      links = JSON.parse(r.links);
+    } catch {
+      // Битая строка ссылок не должна прятать заказ целиком.
+    }
+    if (!links.length) continue;
+    const named = links
+      .map((l) => brandFor(String(l?.account || "").replace(/^@/, "")))
+      .find((b) => b !== "other");
+    const brand = named || "oracle";
+    byJob.set(r.jobId, brand);
+    if (r.kind && !byKind.has(r.kind)) byKind.set(r.kind, brand);
+  }
+
+  for (const r of rows) {
+    if (byJob.has(r.jobId)) continue;
+    byJob.set(r.jobId, byKind.get(r.kind) || r.brand);
+  }
+  return byJob;
+}
+
+/**
  * Строки контент-плана: чем этот завод занят.
  *
  * У СуперФита состав типов задаётся матрицей маршрутов. У остальных матрицы
@@ -125,10 +166,12 @@ export async function planSlots(brand: string = DEFAULT_BRAND) {
   }
 
   const rows = await prisma.factoryJob.findMany({
-    where: { brand, slot: { not: "" } },
-    select: { slot: true },
-    distinct: ["slot"],
-    orderBy: { slot: "asc" },
+    where: { slot: { not: "" } },
+    select: { jobId: true, kind: true, links: true, brand: true, slot: true },
+    orderBy: { at: "desc" },
+    take: 1000,
   });
-  return rows.map((r) => ({ slot: r.slot, label: r.slot, active: true, time: "—" }));
+  const brands = jobBrands(rows);
+  const slots = [...new Set(rows.filter((r) => brands.get(r.jobId) === brand).map((r) => r.slot))];
+  return slots.sort().map((slot) => ({ slot, label: slot, active: true, time: "—" }));
 }

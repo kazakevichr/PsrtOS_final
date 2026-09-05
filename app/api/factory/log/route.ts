@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { factoryAuth } from "@/lib/factory";
+import { factoryAuth, jobBrands } from "@/lib/factory";
 import { notifyRoles } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
@@ -10,10 +10,8 @@ export const dynamic = "force-dynamic";
 // последнюю стадию и копим ссылки на опубликованные посты.
 export async function POST(req: Request) {
   const b = await req.json().catch(() => null);
-  // Кто докладывает — решает ключ: заводов больше одного, и заказы Оракла не
-  // должны ложиться в журнал СуперФита.
-  const brand = factoryAuth(req, b);
-  if (!brand) return new NextResponse("forbidden", { status: 403 });
+  const byKey = factoryAuth(req, b);
+  if (!byKey) return new NextResponse("forbidden", { status: 403 });
   if (!b?.job_id) return NextResponse.json({ error: "job_id required" }, { status: 400 });
 
   const row = await prisma.factoryJob.findUnique({ where: { jobId: b.job_id } });
@@ -21,6 +19,14 @@ export async function POST(req: Request) {
   const freshLinks: any[] = Array.isArray(b.links) ? b.links : [];
   const seen = new Set(prevLinks.map((l) => `${l.account}|${l.link}`));
   const links = [...prevLinks, ...freshLinks.filter((l) => l && !seen.has(`${l.account}|${l.link}`))];
+
+  // Чей заказ — говорит аккаунт публикации, а не ключ: заводы ходят к нам
+  // одним общим секретом, и различать их по нему значило бы требовать
+  // настройки там, где принадлежность и так видна.
+  const brand =
+    jobBrands([
+      { jobId: b.job_id, kind: b.kind ?? row?.kind ?? "", links: JSON.stringify(links), brand: byKey },
+    ]).get(b.job_id) || byKey;
 
   const fields = {
     brand,

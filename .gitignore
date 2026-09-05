@@ -11,3 +11,6 @@ tsconfig.tsbuildinfo
 .DS_Store
 npm-debug.log*
 .idea/
+
+# личные настройки сессии: разрешения не для общего репозитория
+.claude/settings.local.json
